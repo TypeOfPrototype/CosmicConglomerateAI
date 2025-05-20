@@ -84,10 +84,13 @@ class GameState:
         else:
             raise TypeError("coords_input must be a tuple or a list of tuples representing coordinates.")
 
-        # Validate each coordinate in the list
+        # Validate each coordinate in the list and check for 'O' markers
         for coord in coords_list:
             if not (isinstance(coord, tuple) and len(coord) == 2):
                 raise TypeError(f"Each coordinate must be a tuple of (row, col). Invalid coord: {coord}")
+            if coord in self.initial_o_marker_locations:
+                print(f"Error: Cannot create company at {coord}. Position is an 'O' marker tile.")
+                return None, "Cannot create company on an 'O' marker tile."
 
         if not self.available_company_names:
             print("No more available company names to create a new company.")
@@ -141,6 +144,10 @@ class GameState:
         Returns:
             list: List of coordinates that have been updated.
         """
+        if coords in self.initial_o_marker_locations:
+            print(f"Error: Cannot expand company into {coords}. Position is an 'O' marker tile.")
+            return []
+
         if company_name not in self.company_info:
             print(f"Error: Company '{company_name}' does not exist.")
             return []
@@ -313,9 +320,20 @@ class GameState:
                 company_positions.append(c_coords)
         
         extra_value = 0
-        for coord in company_positions:
-            if coord in self.initial_o_marker_locations:
-                extra_value += 200
+        found_adjacency_for_this_company = False
+        for company_coord in company_positions:
+            r, c = company_coord
+            potential_adjacent_o_markers = [
+                (r - 1, c), (r + 1, c),
+                (r, c - 1), (r, c + 1)
+            ]
+            for adj_coord in potential_adjacent_o_markers:
+                if adj_coord in self.initial_o_marker_locations:
+                    extra_value = 200  # Apply bonus
+                    found_adjacency_for_this_company = True
+                    break  # Found adjacency for this company_coord
+            if found_adjacency_for_this_company:
+                break  # Found adjacency for the company
         
         base_value = size * 100
         total_value = base_value + extra_value
@@ -323,6 +341,7 @@ class GameState:
         self.company_info[company_name]['size'] = size
         self.company_info[company_name]['value'] = total_value
         
+        # Ensure the log message for `o_marker_bonus` correctly reflects this `extra_value`.
         print(f"Updated company '{company_name}': size={size}, base_value={base_value}, o_marker_bonus={extra_value}, total_value={total_value}.")
 
         # Update the value in company_map entries
@@ -475,6 +494,10 @@ class GameState:
         Returns:
             tuple: (success (bool), message (str))
         """
+        if coords in self.initial_o_marker_locations:
+            print(f"Error: Cannot place diamond at {coords}. Position is an 'O' marker tile.")
+            return False, "Cannot place diamond on an 'O' marker tile."
+
         if not (isinstance(coords, tuple) and len(coords) == 2):
             print(f"Error: coords must be a tuple of (row, col). Received: {coords}")
             return False, "Invalid coordinates format."
