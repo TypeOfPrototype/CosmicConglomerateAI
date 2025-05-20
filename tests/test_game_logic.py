@@ -392,5 +392,90 @@ class TestDiamondPlacement(unittest.TestCase):
         self.assertEqual(self.game_state.company_map[new_diamond_coord]['company_name'], expected_new_company_name)
 
 
+class TestBonusShares(unittest.TestCase):
+    def setUp(self):
+        self.mock_script_dir = os.path.dirname(__file__)
+        self.players = ["Player1", "Player2"]
+        self.grid_size = (10, 10)
+        self.game_state = GameState(self.players, self.grid_size, self.mock_script_dir)
+        self.game_state.notify_callbacks = MagicMock() # Mock notify_callbacks
+
+    def test_bonus_shares_on_direct_player_creation(self):
+        """
+        Test if 5 bonus shares are awarded when a player directly creates a new company.
+        """
+        current_player = self.game_state.players[0]
+        coord_input = (0, 0)
+        
+        # Ensure player has no shares of this potential company initially
+        # (though company name is not known yet, this is more of a conceptual check)
+        self.assertEqual(len(self.game_state.player_shares[current_player]), 0)
+
+        new_company_name, msg = self.game_state.create_new_company(coord_input, current_player)
+
+        self.assertIsNotNone(new_company_name, f"Company creation failed: {msg}")
+        self.assertIn(new_company_name, self.game_state.player_shares[current_player], "New company not found in player's shares.")
+        self.assertEqual(self.game_state.player_shares[current_player][new_company_name], 5, "Player should have 5 bonus shares.")
+
+    def test_bonus_shares_on_place_diamond_forms_company(self):
+        """
+        Test if 5 bonus shares are awarded when a player places a diamond that forms a new company.
+        """
+        current_player = self.game_state.players[0]
+        initial_diamond_coord = (0, 0)
+        new_diamond_coord = (0, 1) # Adjacent to initial_diamond_coord
+
+        self.game_state.diamond_positions.add(initial_diamond_coord)
+        
+        # Store available company name to check later
+        self.assertTrue(len(self.game_state.available_company_names) > 0, "No available company names for test setup.")
+        expected_company_name = self.game_state.available_company_names[0]
+
+        success, message = self.game_state.place_diamond(new_diamond_coord, current_player)
+
+        self.assertTrue(success, f"Placing diamond failed: {message}")
+        self.assertIn(expected_company_name, message, "Message should indicate company creation.") # Check message
+        
+        # Verify company was formed and shares awarded
+        self.assertIn(expected_company_name, self.game_state.company_info, "Company info not created.")
+        self.assertIn(expected_company_name, self.game_state.player_shares[current_player], f"Company {expected_company_name} not in {current_player}'s shares.")
+        self.assertEqual(self.game_state.player_shares[current_player][expected_company_name], 5, "Player should have 5 bonus shares.")
+        
+        # Verify diamonds were consumed
+        self.assertNotIn(initial_diamond_coord, self.game_state.diamond_positions)
+        self.assertNotIn(new_diamond_coord, self.game_state.diamond_positions)
+
+    def test_bonus_shares_on_player_action_forming_multi_tile_company(self):
+        """
+        Test if 5 bonus shares are awarded when a player's action leads to creating
+        a multi-tile company (simulated by direct call to create_new_company with multiple coords).
+        """
+        current_player = self.game_state.players[0]
+        # These coordinates would typically be a mix of a newly placed tile and adjacent diamonds
+        company_coords = [(0,0), (0,1), (1,0)] 
+        
+        new_company_name, msg = self.game_state.create_new_company(coords_input=company_coords, current_player=current_player)
+
+        self.assertIsNotNone(new_company_name, f"Company creation failed: {msg}")
+        self.assertIn(new_company_name, self.game_state.player_shares[current_player], "New company not in player's shares.")
+        self.assertEqual(self.game_state.player_shares[current_player][new_company_name], 5, "Player should have 5 bonus shares for multi-tile company.")
+
+    def test_no_bonus_shares_if_current_player_is_none(self):
+        """
+        Test that no bonus shares are awarded if create_new_company is called with current_player=None.
+        """
+        # These coordinates might represent diamonds merging naturally without a specific player action.
+        company_coords = [(5,5), (5,6)] 
+        
+        new_company_name, msg = self.game_state.create_new_company(coords_input=company_coords, current_player=None)
+
+        self.assertIsNotNone(new_company_name, f"Company creation failed: {msg}")
+        
+        # Verify no player received shares for this company
+        for player_name in self.game_state.players:
+            self.assertEqual(self.game_state.player_shares[player_name].get(new_company_name, 0), 0,
+                             f"Player {player_name} should not have bonus shares for None-player company creation.")
+
+
 if __name__ == '__main__':
     unittest.main()

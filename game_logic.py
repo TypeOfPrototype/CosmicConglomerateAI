@@ -127,6 +127,10 @@ class GameState:
         self.notify_callbacks(updated_entries)
 
         if current_player:
+            # Award 5 bonus shares to the player who created the company
+            self.player_shares[current_player][company_name] = self.player_shares[current_player].get(company_name, 0) + 5
+            print(f"Awarded 5 bonus shares of '{company_name}' to player '{current_player}'.")
+            
             self.player_has_moved[current_player] = True  # Player has made a move
             return company_name, f"{current_player} created {company_name}!"
         else:
@@ -493,12 +497,13 @@ class GameState:
                     queue.append(cell)
         return connected
 
-    def place_diamond(self, coords):
+    def place_diamond(self, coords, current_player):
         """
         Places a diamond at the specified coordinates and handles potential mergers.
 
         Parameters:
             coords (tuple): The coordinate to place the diamond at.
+            current_player (str): The player performing this action.
 
         Returns:
             tuple: (success (bool), message (str))
@@ -526,39 +531,45 @@ class GameState:
             # Scenario 1: Diamond connects to 2 or more existing diamonds
             if self.available_company_names:
                 # Scenario 1.a: Company names are available - form a new company
-                print(f"Attempting to form a new company with diamonds: {connected_diamonds}")
-                new_company_name, message = self.create_new_company(list(connected_diamonds), current_player=None)
+                print(f"Attempting to form a new company with diamonds: {connected_diamonds} by player {current_player}")
+                new_company_name, message = self.create_new_company(list(connected_diamonds), current_player=current_player)
                 if new_company_name:
                     # Remove the merged diamonds from diamond_positions as they are now part of a company
                     self.diamond_positions.difference_update(connected_diamonds)
                     print(f"Merged diamonds at {connected_diamonds} into new company '{new_company_name}'.")
-                    # player_has_moved is handled by create_new_company if current_player was passed,
-                    # but here it's None. However, forming a company is a significant move.
-                    # Let's ensure player_has_moved is set, though this path might be for system actions.
-                    # For now, assuming this is a valid move.
-                    # If this function is called by a player action, that player should be passed or handled.
-                    # For diamond merges not directly by player tile placement, this might be okay.
-                    # The original code did not explicitly set player_has_moved here for None player.
+                    # player_has_moved is handled by create_new_company when current_player is provided and company is formed.
                     return True, message
                 else:
-                    print("Failed to create a new company from diamonds even with available names.")
-                    # If company creation fails, the diamond placement might still be valid if it was a valid spot.
-                    # However, the original logic returns False. Let's stick to that for now.
-                    # Re-adding the diamond to diamond_positions if create_new_company failed and potentially removed it
-                    # might be needed if we wanted the diamond to remain. But current logic implies failure.
-                    return False, "Failed to create a new company from diamonds."
+                    # Failed to create company (e.g. an 'O' marker tile was part of connected_diamonds)
+                    # The diamond was added to diamond_positions, but if creation fails, it should ideally be removed
+                    # or the placement itself should be invalid.
+                    # However, create_new_company can fail if a coord in coords_list is an 'O' marker.
+                    # If one of the connected_diamonds is an 'O' marker, this path is taken.
+                    # The initial diamond placement at 'coords' might be valid, but the broader group isn't.
+                    # For now, let's assume if new_company_name is None, the overall action related to
+                    # forming a company from this set of diamonds failed.
+                    # The problem description implies create_new_company might fail due to other reasons too.
+                    # If the failure was due to an 'O' marker, then the diamond at 'coords' might need to be reverted too if strict.
+                    # Current logic: if new_company_name is None, it's a failure to form company.
+                    # The initial diamond at 'coords' remains in diamond_positions.
+                    print(f"Failed to create a new company from diamonds: {message}")
+                    # This path indicates a complex failure. The player did attempt a move.
+                    # It's debatable if player_has_moved should be True if the *intended* company formation failed.
+                    # However, a diamond *was* placed.
+                    self.player_has_moved[current_player] = True # A diamond was placed.
+                    return False, message # Return the message from create_new_company
             else:
                 # Scenario 1.b: All company names are in use - place diamond, no new company
                 print(f"Diamond placed at {coords}, connects to {len(connected_diamonds)-1} other diamonds. All company names in use. No new company formed.")
                 # The diamond was already added to self.diamond_positions at the start of the function.
                 # No company is formed, so diamonds remain in self.diamond_positions.
-                self.player_has_moved[self.players[self.current_player_index]] = True
+                self.player_has_moved[current_player] = True
                 return True, f"Diamond placed at {coords}. All companies formed, no new company created."
         else:
             # Scenario 2: Standalone diamond or connects to only one other diamond (not enough to form company)
             print(f"Diamond at {coords} does not form a new company. Connected diamonds: {len(connected_diamonds)}")
             # The diamond was already added to self.diamond_positions at the start of the function.
-            self.player_has_moved[self.players[self.current_player_index]] = True  # Player has made a move
+            self.player_has_moved[current_player] = True  # Player has made a move
             return True, f"Diamond placed at {coords}."
 
     def end_turn(self):
