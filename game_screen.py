@@ -131,12 +131,13 @@ class GameScreen(Screen):
         random.shuffle(all_coordinates)
 
         # Select the first `max_circles` coordinates for "O" markers
-        circle_coordinates = all_coordinates[:max_circles]
+        o_marker_locations_list = all_coordinates[:max_circles]
+        o_marker_locations_set = set(o_marker_locations_list)
 
         for row in range(self.grid_size[1]):
             button_row = []
             for col in range(self.grid_size[0]):
-                if (row, col) in circle_coordinates:
+                if (row, col) in o_marker_locations_set:
                     btn = Button(
                         text="O",
                         font_size=24,
@@ -160,6 +161,9 @@ class GameScreen(Screen):
                 button_row.append(btn)
                 self.grid_layout.add_widget(btn)
             self.grid_buttons.append(button_row)
+
+        # Pass the collected 'O' marker locations to GameState
+        self.game_state.set_initial_o_marker_locations(o_marker_locations_set)
 
         self.game_layout.add_widget(self.grid_layout)
 

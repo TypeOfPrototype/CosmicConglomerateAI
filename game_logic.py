@@ -41,6 +41,11 @@ class GameState:
 
         # Callbacks for UI updates
         self.callbacks = []
+        self.initial_o_marker_locations = set()
+
+    def set_initial_o_marker_locations(self, locations_set):
+        self.initial_o_marker_locations = locations_set
+        print(f"Initial O marker locations set: {self.initial_o_marker_locations}") # Optional: for debugging
 
     def register_callback(self, callback):
         """
@@ -109,6 +114,9 @@ class GameState:
             }
             updated_entries.append((coord, company_name))
             print(f"Assigned '{company_name}' to {coord} owned by '{current_player if current_player else 'Diamond'}'.")
+
+        # Update the new company's value to include any "O" marker bonuses
+        self.update_company_value(company_name)
 
         print(f"Created new company '{company_name}' at {coords_list} owned by '{current_player if current_player else 'Diamond'}'.")
 
@@ -303,19 +311,27 @@ class GameState:
             if c_info["company_name"] == company_name:
                 size += 1
                 company_positions.append(c_coords)
-        base_value = size * 100
-        # You can add more logic for extra_value if needed
+        
         extra_value = 0
+        for coord in company_positions:
+            if coord in self.initial_o_marker_locations:
+                extra_value += 200
+        
+        base_value = size * 100
         total_value = base_value + extra_value
 
         self.company_info[company_name]['size'] = size
         self.company_info[company_name]['value'] = total_value
-
-        print(f"Updated company '{company_name}': size={size}, value={total_value}.")
+        
+        print(f"Updated company '{company_name}': size={size}, base_value={base_value}, o_marker_bonus={extra_value}, total_value={total_value}.")
 
         # Update the value in company_map entries
         for c_coords in company_positions:
             self.company_map[c_coords]['value'] = total_value
+            # The existing print statement for company_map update can remain or be adjusted if needed.
+            # For now, let's keep it as is, or we can make it more detailed.
+            # print(f"Set value at {c_coords} for company '{company_name}' to {total_value}.")
+            # Keeping the old one for consistency with previous logs unless a change is specifically requested for this line.
             print(f"Set value at {c_coords} to {total_value}.")
 
     def check_share_split(self, company_name):
