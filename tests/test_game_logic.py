@@ -165,6 +165,104 @@ class TestGameLogicMergers(unittest.TestCase):
         self.assertEqual(self.game_state.company_info['BigCorp']['size'], 3)
         self.assertIn('SmallCorp', self.game_state.available_company_names)
 
+    def test_merge_companies_with_diamonds_no_names_available(self):
+        """
+        Test merging two companies (A and B) via a tile placement that is also
+        adjacent to diamonds, when no company names are available for forming
+        a new company from diamonds. Expects normal merger of A & B.
+        """
+        # 1. Initial GameState (done by setUp)
+        # 2. Consume all available company names
+        company_names_in_use = []
+        for i in range(len(self.game_state.all_company_names)):
+            coord = (0, i) # Dummy coordinates for placeholder companies
+            company_name, msg = self.game_state.create_new_company(coord, self.players[0])
+            self.assertIsNotNone(company_name, f"Failed to create placeholder company {i+1}: {msg}")
+            company_names_in_use.append(company_name)
+        
+        self.assertEqual(len(self.game_state.available_company_names), 0, "All company names should be consumed.")
+        initial_total_companies = self.game_state.active_companies # Should be 5
+
+        # 3. Set up two specific active companies (Company A and Company B)
+        # These companies were already created above. We just need to define their specific structure.
+        # For this test, we'll re-purpose two of the companies created above.
+        # Let's assume company_names_in_use[0] is Company A, company_names_in_use[1] is Company B.
+        
+        company_a_name = company_names_in_use[0] # e.g., "Nerdniss"
+        company_b_name = company_names_in_use[1] # e.g., "Beetleguice"
+
+        # Clear the dummy locations for A and B from company_map and reset their info for proper setup
+        del self.game_state.company_map[(0,0)] 
+        del self.game_state.company_map[(0,1)]
+        
+        company_a_coords = [(2,2), (2,3)]
+        company_b_coords = [(2,5), (2,6)]
+
+        self.game_state.company_info[company_a_name] = {'size': 0, 'value': 0} # Reset before update
+        self.game_state.company_info[company_b_name] = {'size': 0, 'value': 0} # Reset before update
+
+        for coord in company_a_coords:
+            self.game_state.company_map[coord] = {"company_name": company_a_name, "owner": self.players[0], "value": 0}
+        self.game_state.update_company_value(company_a_name) # Updates size to 2, value to 200
+
+        for coord in company_b_coords:
+            self.game_state.company_map[coord] = {"company_name": company_b_name, "owner": self.players[0], "value": 0}
+        self.game_state.update_company_value(company_b_name) # Updates size to 2, value to 200
+        
+        # Ensure other placeholder companies (3, 4, 5) don't interfere with merge tile adjacencies
+        # Their coords (0,2), (0,3), (0,4) are far from (2,4)
+
+        # 4. Place diamonds
+        diamond_coord1 = (1,4)
+        diamond_coord2 = (3,4)
+        self.game_state.diamond_positions.add(diamond_coord1)
+        self.game_state.diamond_positions.add(diamond_coord2)
+
+        # 5. Define merge_trigger_coord
+        merge_trigger_coord = (2,4) # Adjacent to Company A, Company B, and the two diamonds
+
+        # 6. Player turn setup and action (expand Company A into merge_trigger_coord)
+        current_player = self.game_state.players[0]
+        self.game_state.player_has_moved[current_player] = False
+        
+        # Action: Expand company_a_name. This should trigger merge_companies.
+        # expand_company will set player_has_moved.
+        # Since company_a_name and company_b_name have equal size (2), company_a_name (the one being expanded)
+        # should be the acquiring company.
+        updated_coords = self.game_state.expand_company(coords=merge_trigger_coord, company_name=company_a_name, current_player=current_player)
+        self.assertTrue(len(updated_coords) > 0, "Expansion and merger should occur.")
+
+        # 7. Assertions
+        # a. Game does not crash (implicit if test reaches here)
+        
+        # b. merge_trigger_coord is in company_map
+        self.assertIn(merge_trigger_coord, self.game_state.company_map)
+        
+        # c. Company at merge_trigger_coord is the dominant company (company_a_name)
+        self.assertEqual(self.game_state.company_map[merge_trigger_coord]['company_name'], company_a_name)
+        
+        # d. Original coords of A and B now map to dominant company
+        for coord in company_a_coords:
+            self.assertEqual(self.game_state.company_map[coord]['company_name'], company_a_name)
+        for coord in company_b_coords: # These should now also belong to company_a_name
+            self.assertEqual(self.game_state.company_map[coord]['company_name'], company_a_name)
+            
+        # e. Available company names: company_b_name's name should be returned
+        self.assertEqual(len(self.game_state.available_company_names), 1)
+        self.assertIn(company_b_name, self.game_state.available_company_names)
+        
+        # f. Active companies decreased by one (B merged into A)
+        # Initial total companies was 5. One merged, so 4 remain.
+        self.assertEqual(self.game_state.active_companies, initial_total_companies - 1)
+        self.assertNotIn(company_b_name, self.game_state.company_info, "Company B should be dissolved.")
+        
+        # g. Diamonds are still present (no diamond company formed)
+        self.assertIn(diamond_coord1, self.game_state.diamond_positions)
+        self.assertIn(diamond_coord2, self.game_state.diamond_positions)
+        
+        # h. Player has moved
+        self.assertTrue(self.game_state.player_has_moved[current_player])
+
 
 class TestDiamondPlacement(unittest.TestCase):
     def setUp(self):
