@@ -209,18 +209,32 @@ class GameState:
             print(f"Multiple diamonds adjacent to {coords}. Creating a new company.")
             # Include the current coords in the new company
             diamonds_to_merge = set(adjacent_diamonds)
-            diamonds_to_merge.add(coords)
-            new_company_name, message = self.create_new_company(list(diamonds_to_merge), current_player)
+            # Add the triggering coordinate to the set of tiles that would form the new company
+            # If coords is already a diamond, set properties handle it.
+            # If coords is not a diamond, it's included for the attempt.
+            potential_new_company_tiles = set(adjacent_diamonds)
+            potential_new_company_tiles.add(coords)
+
+            print(f"Attempting to create a new company from diamonds and triggering tile: {potential_new_company_tiles}")
+            new_company_name, message = self.create_new_company(list(potential_new_company_tiles), current_player)
+
             if new_company_name:
-                # Remove the merged diamonds from diamond_positions
-                for cell in diamonds_to_merge:
-                    self.diamond_positions.discard(cell)
-                print(f"Merged diamonds into new company '{new_company_name}' at {coords}.")
-                # Notify callbacks already handled in create_new_company
-                return [(coord, new_company_name) for coord in diamonds_to_merge]
+                # Successfully created a new company from diamonds and the triggering tile
+                # Remove all constituent tiles of the new company from diamond_positions
+                # (if they were diamonds to begin with)
+                for cell in potential_new_company_tiles:
+                    self.diamond_positions.discard(cell) # discard is safe if cell wasn't a diamond
+                
+                print(f"Successfully merged diamonds and tile {coords} into new company '{new_company_name}'.")
+                # Notify callbacks is handled by create_new_company
+                # The player_has_moved flag is also handled by create_new_company
+                return [(tile, new_company_name) for tile in potential_new_company_tiles]
             else:
-                print("Failed to create a new company from diamonds.")
-                return []
+                # Failed to create a new company from diamonds (e.g., no names available)
+                # Do not return. Instead, proceed to normal merger logic for the 'coords' tile.
+                # The adjacent_diamonds remain on the board.
+                print(f"Failed to create a new company from diamonds and tile {coords} (e.g., '{message}'). Proceeding with normal merger for the tile.")
+                # No return here; execution will fall through.
 
         # **Proceed with Normal Merge into the Largest Existing Company**
         companies = list(companies)
