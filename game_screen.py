@@ -17,6 +17,7 @@ from kivy.core.window import Window
 from kivy.graphics import Color, Rectangle
 from kivy.clock import Clock
 from kivy.animation import Animation
+from kivy.app import App # Added import
 
 from custom_widgets import ImageButton
 from game_logic import GameState
@@ -86,6 +87,16 @@ class GameScreen(Screen):
         self.sidebar_layout.add_widget(self.player_money_label)
         self.sidebar_layout.add_widget(self.player_holdings_label)
         self.sidebar_layout.add_widget(self.company_info_label)
+
+        # Settings button
+        self.settings_button = Button(
+            text="Settings",
+            size_hint=(1, 0.1),
+            font_size=Window.height * 0.018 # Match other sidebar elements
+        )
+        self.settings_button.bind(on_press=self.open_settings_popup)
+        self.sidebar_layout.add_widget(self.settings_button)
+
         self.main_layout.add_widget(self.sidebar_layout)
 
         # Game board layout
@@ -775,3 +786,103 @@ class GameScreen(Screen):
                 self.company_info_label.text = "Company Info:"
         else:
             self.company_info_label.text = "Company Info:"
+
+    def open_settings_popup(self, instance):
+        """
+        Opens a settings popup with options to restart or go to main menu.
+        """
+        content_layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
+
+        # Font size adjustment
+        font_label = Label(text="Adjust Font Size:", size_hint_y=None, height=44)
+        content_layout.add_widget(font_label)
+
+        # Assuming default Kivy font size is around 15-16sp. Slider range 10-30sp.
+        # Default value can be set to the current global font size if accessible, or a sensible default.
+        font_slider = Slider(min=10, max=30, value=16, step=1, size_hint_y=None, height=44)
+        self.font_value_label = Label(text=f"Current Size: {int(font_slider.value)}", size_hint_y=None, height=44)
+        
+        font_slider.bind(value=self.on_font_slider_change)
+        
+        content_layout.add_widget(self.font_value_label)
+        content_layout.add_widget(font_slider)
+
+        # Spacer or separator can be added here if needed for visual separation
+        # content_layout.add_widget(Label(size_hint_y=None, height=20)) # Example spacer
+
+        restart_button = Button(text="Restart Game", size_hint_y=None, height=44)
+        restart_button.bind(on_press=self.restart_game_action)
+        content_layout.add_widget(restart_button)
+
+        main_menu_button = Button(text="Go to Main Menu", size_hint_y=None, height=44)
+        main_menu_button.bind(on_press=self.go_to_main_menu_action)
+        content_layout.add_widget(main_menu_button)
+
+        # Store the popup instance to be able to dismiss it from actions
+        self.settings_popup = Popup(
+            title="Settings",
+            content=content_layout,
+            size_hint=(0.6, 0.4) # 60% width, 40% height
+        )
+        self.settings_popup.open()
+
+    def restart_game_action(self, instance):
+        """
+        Action for restarting the game. Navigates to the 'start' screen.
+        """
+        if hasattr(self, 'settings_popup') and self.settings_popup.parent:
+            self.settings_popup.dismiss()
+        
+        App.get_running_app().root.current = 'start'
+        print("Restart Game button pressed - navigating to start screen.")
+
+    def go_to_main_menu_action(self, instance):
+        """
+        Action for going to the main menu. Navigates to the 'start' screen.
+        """
+        if hasattr(self, 'settings_popup') and self.settings_popup.parent:
+            self.settings_popup.dismiss()
+
+        App.get_running_app().root.current = 'start'
+        print("Go to Main Menu button pressed - navigating to start screen.")
+
+    def on_font_slider_change(self, instance, value):
+        """
+        Called when the font size slider value changes.
+        Updates the label displaying the current font size.
+        """
+        new_font_size = int(value)
+        self.font_value_label.text = f"Current Size: {new_font_size}"
+        print(f"Font size changed to: {new_font_size}")
+
+        # Apply the new font size to relevant labels
+        if hasattr(self, 'info_label'):
+            self.info_label.font_size = new_font_size
+        
+        if hasattr(self, 'current_player_label'):
+            self.current_player_label.font_size = new_font_size
+            
+        if hasattr(self, 'player_money_label'):
+            self.player_money_label.font_size = new_font_size
+            
+        if hasattr(self, 'player_holdings_label'):
+            self.player_holdings_label.font_size = new_font_size
+            
+        if hasattr(self, 'company_info_label'):
+            # If company_info_label contains other labels, they might need individual updates
+            # For now, updating the main container label's font_size.
+            # If it's just a text container, this is fine. If it holds other labels,
+            # those labels' font_size would also need to be adjusted, potentially by iterating
+            # through its children or having direct references.
+            # The current structure of show_company_info creates new labels each time,
+            # so this change will only affect the "Company Info:" title if it's directly set.
+            # Let's assume the intent is for the main labels controlled by GameScreen.
+            self.company_info_label.font_size = new_font_size
+        
+        # Consider also updating font sizes of buttons or other elements if desired
+        # For example, the settings popup buttons themselves, or sidebar buttons.
+        # For now, sticking to the primary informational labels.
+        
+        # Note: If labels within show_company_info popup need dynamic font updates,
+        # that method would also need to be aware of the current global font size setting.
+        # This current implementation changes font_size for labels directly managed by GameScreen.
