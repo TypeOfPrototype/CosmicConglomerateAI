@@ -166,5 +166,133 @@ class TestGameLogicMergers(unittest.TestCase):
         self.assertIn('SmallCorp', self.game_state.available_company_names)
 
 
+class TestDiamondPlacement(unittest.TestCase):
+    def setUp(self):
+        self.mock_script_dir = os.path.dirname(__file__)
+        self.players = ["Player1", "Player2"]
+        self.grid_size = (10, 10)
+        self.game_state = GameState(self.players, self.grid_size, self.mock_script_dir)
+        self.game_state.notify_callbacks = MagicMock() # Mock notify_callbacks
+
+        # Consume all available company names
+        for i in range(len(self.game_state.all_company_names)):
+            # Use distinct coordinates for each company to avoid placement errors
+            # Ensure these coordinates are not problematic (e.g., 'O' markers if any were predefined)
+            # For this test, assuming (i, 0) are valid, non-'O' marker locations.
+            coord = (i, 0) 
+            company_name, msg = self.game_state.create_new_company(coord, self.players[0])
+            if company_name is None:
+                # This should not happen in a clean setup if logic is correct
+                # and all_company_names has 5 unique names.
+                raise Exception(f"Failed to create company {i+1} to set up test: {msg}")
+        
+        # Ensure player_has_moved is reset for the current player before each test method if needed
+        # For this specific test, we'll set it explicitly.
+
+    def test_place_diamond_connects_no_available_company_names(self):
+        """
+        Test placing a diamond that connects to an existing diamond when all company names are in use.
+        Expected behavior: Diamond is placed, no new company is formed.
+        """
+        # Precondition: All company names should be used up
+        self.assertEqual(len(self.game_state.available_company_names), 0, "Precondition failed: Not all company names are used.")
+
+        initial_active_companies = self.game_state.active_companies
+        
+        # Place an initial diamond
+        initial_diamond_coord = (5, 5)
+        self.game_state.diamond_positions.add(initial_diamond_coord)
+        
+        # New diamond to be placed adjacent to the initial one
+        new_diamond_coord = (5, 6)
+        
+        # Ensure current player's has_moved flag is False before the action
+        current_player = self.game_state.players[self.game_state.current_player_index]
+        self.game_state.player_has_moved[current_player] = False
+        
+        # Action: Place the new diamond
+        success, message = self.game_state.place_diamond(new_diamond_coord)
+        
+        # Assertions
+        self.assertTrue(success, "place_diamond should return True for successful placement.")
+        expected_message = f"Diamond placed at {new_diamond_coord}. All companies formed, no new company created."
+        self.assertEqual(message, expected_message, "Incorrect message returned by place_diamond.")
+        
+        self.assertIn(initial_diamond_coord, self.game_state.diamond_positions, "Initial diamond should remain.")
+        self.assertIn(new_diamond_coord, self.game_state.diamond_positions, "New diamond should be added.")
+        
+        self.assertEqual(len(self.game_state.available_company_names), 0, "Available company names should still be zero.")
+        self.assertEqual(self.game_state.active_companies, initial_active_companies, "Active company count should not change.")
+        
+        self.assertNotIn(initial_diamond_coord, self.game_state.company_map, "No company should be mapped to the initial diamond's location.")
+        self.assertNotIn(new_diamond_coord, self.game_state.company_map, "No company should be mapped to the new diamond's location.")
+        
+        self.assertTrue(self.game_state.player_has_moved[current_player], "Player's has_moved flag should be True.")
+
+    def test_place_standalone_diamond_no_available_company_names(self):
+        """
+        Test placing a standalone diamond (not connecting to others) when all company names are in use.
+        Expected behavior: Diamond is placed, no company is formed.
+        """
+        self.assertEqual(len(self.game_state.available_company_names), 0, "Precondition failed: Not all company names are used.")
+        initial_active_companies = self.game_state.active_companies
+        
+        diamond_coord = (3, 3)
+        
+        current_player = self.game_state.players[self.game_state.current_player_index]
+        self.game_state.player_has_moved[current_player] = False
+        
+        success, message = self.game_state.place_diamond(diamond_coord)
+        
+        self.assertTrue(success)
+        self.assertEqual(message, f"Diamond placed at {diamond_coord}.")
+        self.assertIn(diamond_coord, self.game_state.diamond_positions)
+        self.assertEqual(len(self.game_state.available_company_names), 0)
+        self.assertEqual(self.game_state.active_companies, initial_active_companies)
+        self.assertNotIn(diamond_coord, self.game_state.company_map)
+        self.assertTrue(self.game_state.player_has_moved[current_player])
+
+    def test_place_diamond_forms_company_if_names_available(self):
+        """
+        Test that placing a diamond that connects to another forms a company if names are available.
+        This is a contrast to the "no available names" scenario.
+        """
+        # Reset available_company_names for this test by creating a new GameState instance
+        # or manually managing the list. For simplicity, let's re-initialize part of the state.
+        self.game_state = GameState(self.players, self.grid_size, self.mock_script_dir) # Fresh state
+        self.game_state.notify_callbacks = MagicMock()
+        
+        self.assertTrue(len(self.game_state.available_company_names) > 0, "Precondition: Should have available company names.")
+        initial_active_companies = self.game_state.active_companies
+        expected_new_company_name = self.game_state.available_company_names[0]
+
+        initial_diamond_coord = (7, 7)
+        self.game_state.diamond_positions.add(initial_diamond_coord)
+        
+        new_diamond_coord = (7, 8) # Adjacent
+        
+        current_player = self.game_state.players[self.game_state.current_player_index]
+        # Note: player_has_moved is not directly set by place_diamond if a company is formed by diamonds (current_player=None)
+        # However, the sub-call to create_new_company would set it if current_player was passed.
+        # The original place_diamond logic for company formation via diamonds doesn't set player_has_moved for the *current_player*.
+        # This test should focus on company formation.
+        
+        success, message = self.game_state.place_diamond(new_diamond_coord)
+        
+        self.assertTrue(success)
+        expected_message_part = f"A new company '{expected_new_company_name}' was created from diamonds!"
+        self.assertEqual(message, expected_message_part)
+        
+        # Diamonds should be consumed and removed from diamond_positions
+        self.assertNotIn(initial_diamond_coord, self.game_state.diamond_positions)
+        self.assertNotIn(new_diamond_coord, self.game_state.diamond_positions)
+        
+        self.assertEqual(self.game_state.active_companies, initial_active_companies + 1)
+        self.assertIn(initial_diamond_coord, self.game_state.company_map)
+        self.assertIn(new_diamond_coord, self.game_state.company_map)
+        self.assertEqual(self.game_state.company_map[initial_diamond_coord]['company_name'], expected_new_company_name)
+        self.assertEqual(self.game_state.company_map[new_diamond_coord]['company_name'], expected_new_company_name)
+
+
 if __name__ == '__main__':
     unittest.main()
