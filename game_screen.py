@@ -33,7 +33,7 @@ class GameScreen(Screen):
         self.blinking_buttons = []
         self.blinking_animations = []
 
-    def initialize_game(self, player_names, grid_size, game_turn_length):
+    def initialize_game(self, player_names, grid_size, game_turn_length, marker_percentage=0.1):
         self.main_layout.clear_widgets()
 
         # Initialize GameState
@@ -118,19 +118,25 @@ class GameScreen(Screen):
         # Initialize grid buttons
         self.grid_buttons = []
         total_cells = self.grid_size[0] * self.grid_size[1]
-        max_circles = int(total_cells * 0.1)  # 10% circles
-        placed_circles = 0
+        # Use the marker_percentage from StartScreen, default to 0.1 if not provided
+        max_circles = int(total_cells * marker_percentage)
+
+        # Create a list of all possible (row, col) coordinates
+        all_coordinates = []
+        for r in range(self.grid_size[1]):
+            for c in range(self.grid_size[0]):
+                all_coordinates.append((r, c))
+
+        # Randomly shuffle the list of all possible coordinates
+        random.shuffle(all_coordinates)
+
+        # Select the first `max_circles` coordinates for "O" markers
+        circle_coordinates = all_coordinates[:max_circles]
 
         for row in range(self.grid_size[1]):
             button_row = []
             for col in range(self.grid_size[0]):
-                if placed_circles < max_circles and random.random() < 0.3:
-                    cell_type = "Circle"
-                    placed_circles += 1
-                else:
-                    cell_type = ""
-
-                if cell_type == "Circle":
+                if (row, col) in circle_coordinates:
                     btn = Button(
                         text="O",
                         font_size=24,
@@ -149,9 +155,7 @@ class GameScreen(Screen):
                     )
                     btn.bind(on_press=self.on_grid_button_press)
                     btn.bind(on_release=self.show_company_info)
-
-                if cell_type != "Circle":
-                    btn.disabled = True  # Initially, all buttons are disabled
+                    btn.disabled = True  # Initially, all non-circle buttons are disabled
 
                 button_row.append(btn)
                 self.grid_layout.add_widget(btn)
