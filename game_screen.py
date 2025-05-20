@@ -336,36 +336,44 @@ class GameScreen(Screen):
         This includes setting the correct logo and color.
         """
         logo_path = self.game_state.company_logos.get(company_name, '')
+
         if os.path.exists(logo_path):
-            # Use logo image
-            button.source = ''  # Clear current image first
-            button.reload() # Optional: reload after clearing
-            button.source = logo_path # Set the new image
-            button.reload() # Reload the new image
-            button.color = [1, 1, 1, 1]  # Reset color
-            print(f"Set button source to '{logo_path}' for company '{company_name}'.")
-        else:
-            # Use company color
-            button.source = ''  # Ensure no image is set
-            # Assuming company_colors is a dict in game_state, if not, this will need adjustment or removal
-            # For now, let's keep a default color if company_colors is not available or company not in it.
+            button.source = ''  # Clear current image
+            button.reload()     # Process clearing
+
+            def _set_final_logo(dt): # Inner callback
+                button.source = logo_path
+                button.reload()
+                button.color = [1, 1, 1, 1] # Reset color with logo
+                print(f"Set button source (scheduled) to '{logo_path}' for company '{company_name}'.")
+            
+            Clock.schedule_once(_set_final_logo, 0) # Schedule for next frame
+        
+        else: # Fallback if logo doesn't exist
+            button.source = '' # Ensure no image is set
+            button.reload()    # Process clearing
+            # Fallback color logic from previous implementation (tinting the non-existent image)
             default_color = [0.5, 0.5, 0.5, 1] # A neutral default color
             if hasattr(self.game_state, 'company_colors'):
                 button.color = self.game_state.company_colors.get(company_name, default_color)
-                print(f"Set button color to '{self.game_state.company_colors.get(company_name, default_color)}' for company '{company_name}'.")
+                # This print might be confusing as it says "Set button color" but it's tinting an empty source.
+                # For consistency with previous code, it's kept. A better approach might be button.background_color.
+                print(f"Logo for '{company_name}' not found. Set button color (tint) to '{button.color}'.")
             else:
                 button.color = default_color
-                print(f"Attribute 'company_colors' not found in game_state. Set button color to default for company '{company_name}'.")
-        button.text = ""  # Remove any existing text
-        button.angle = 0  # Ensure angle is reset
-        button.scale_x = 1  # Reset scale
-        # Ensure no ongoing animations
+                print(f"Logo for '{company_name}' not found and no company_colors. Set button color (tint) to default '{button.color}'.")
+
+        # These should apply immediately:
+        button.text = ""
+        button.angle = 0
+        button.scale_x = 1
         if hasattr(button, 'anim') and button.anim:
             button.anim.cancel(button)
-            del button.anim
-        # Disable the button after updating to prevent further interaction
+            # Using delattr as suggested in the problem description for safety
+            if hasattr(button, 'anim'): # Check again in case cancel somehow removed it
+                 delattr(button, 'anim')
         button.disabled = True
-        print(f"Button at ({button.coords[0]}, {button.coords[1]}) updated and disabled.")
+        print(f"Button at ({button.coords[0]}, {button.coords[1]}) properties reset and disabled.")
 
     def is_adjacent_to(self, coords, types):
         """
