@@ -88,6 +88,35 @@ class StartScreen(Screen):
         grid_size_layout.add_widget(self.grid_size_spinner)
         layout.add_widget(grid_size_layout)
 
+        # Marker percentage selection
+        marker_percentage_layout = BoxLayout(size_hint=(1, None), height=50, spacing=10)
+        marker_percentage_label = Label(
+            text='Marker Percentage:',
+            size_hint=(0.3, 1),
+            font_size=24,
+            color=(1, 1, 1, 1),
+            font_name=FONT_PATH
+        )
+        self.marker_percentage_slider = Slider(
+            min=0,
+            max=50,
+            value=10,
+            step=1,
+            size_hint=(0.5, 1)
+        )
+        self.marker_percentage_value_label = Label(
+            text=f"{int(self.marker_percentage_slider.value)}%",
+            size_hint=(0.2, 1),
+            font_size=24,
+            color=(1, 1, 1, 1),
+            font_name=FONT_PATH
+        )
+        self.marker_percentage_slider.bind(value=self._update_marker_percentage_label)
+        marker_percentage_layout.add_widget(marker_percentage_label)
+        marker_percentage_layout.add_widget(self.marker_percentage_slider)
+        marker_percentage_layout.add_widget(self.marker_percentage_value_label)
+        layout.add_widget(marker_percentage_layout)
+
         # Game turn length input
         self.turn_length_input = TextInput(
             hint_text='Enter Game Turn Length (Default: 80)',
@@ -136,6 +165,9 @@ class StartScreen(Screen):
     def _update_button_round(self, instance, value):
         self.start_button_round.pos = instance.pos
         self.start_button_round.size = instance.size
+
+    def _update_marker_percentage_label(self, instance, value):
+        self.marker_percentage_value_label.text = f"{int(value)}%"
 
     def animate_widgets(self):
         # Fade in the title
@@ -194,6 +226,7 @@ class StartScreen(Screen):
 
         # Pass configuration to the game screen
         self.manager.current = 'game'
+        marker_percentage = self.marker_percentage_slider.value / 100.0
         self.manager.get_screen('game').initialize_game(
-            player_names, (cols, rows), game_turn_length
+            player_names, (cols, rows), game_turn_length, marker_percentage
         )
