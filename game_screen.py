@@ -279,7 +279,8 @@ class GameScreen(Screen):
         Place a diamond on the selected square and handle potential mergers.
         """
         current_coords = instance.coords
-        success, message = self.game_state.place_diamond(current_coords)
+        current_player_name = self.game_state.players[self.game_state.current_player_index]
+        success, message = self.game_state.place_diamond(current_coords, current_player_name)
         if success:
             if os.path.exists(self.game_state.diamond_image_path):
                 # Set the image source to diamond.png
