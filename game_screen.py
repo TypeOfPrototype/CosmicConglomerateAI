@@ -97,25 +97,27 @@ class GameScreen(Screen):
             color=(1, 1, 1, 1)
         )
         self.sidebar_spacer = Label(size_hint=(1, 0.1)) # Adjusted spacer
-
-        # Add widgets in the new order
-        self.sidebar_layout.clear_widgets() # Clear any previous additions if any (e.g. during re-initialization)
-        self.sidebar_layout.add_widget(self.current_player_label)
-        self.sidebar_layout.add_widget(self.player_money_label)
-        self.sidebar_layout.add_widget(self.holdings_title_label)
-        self.sidebar_layout.add_widget(self.holdings_display_container)
-        self.sidebar_layout.add_widget(self.total_wealth_label)
-        self.sidebar_layout.add_widget(self.company_info_label)
-        self.sidebar_layout.add_widget(self.sidebar_spacer)
         
-        # Settings button (ensure it's defined before adding)
         self.settings_button = Button(
             text="Settings",
             size_hint=(1, 0.1),
             font_size=Window.height * 0.018 # Match other sidebar elements
         )
         self.settings_button.bind(on_press=self.open_settings_popup)
-        self.sidebar_layout.add_widget(self.settings_button)
+
+        # Clear existing widgets from sidebar_layout before adding new ones in correct order
+        self.sidebar_layout.clear_widgets() 
+        
+        # Add widgets in the specified order
+        self.sidebar_layout.add_widget(self.current_player_label)       # size_hint_y: 0.1
+        self.sidebar_layout.add_widget(self.player_money_label)        # size_hint_y: 0.1
+        self.sidebar_layout.add_widget(self.holdings_title_label)      # size_hint_y: 0.05
+        self.sidebar_layout.add_widget(self.holdings_display_container) # size_hint_y: 0.3
+        self.sidebar_layout.add_widget(self.total_wealth_label)        # size_hint_y: 0.05
+        self.sidebar_layout.add_widget(self.company_info_label)        # size_hint_y: 0.2
+        self.sidebar_layout.add_widget(self.sidebar_spacer)            # size_hint_y: 0.1
+        self.sidebar_layout.add_widget(self.settings_button)           # size_hint_y: 0.1
+                                                                        # Total: 1.0
 
         self.main_layout.add_widget(self.sidebar_layout)
 
