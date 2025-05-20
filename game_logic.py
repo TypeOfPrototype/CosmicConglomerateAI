@@ -21,13 +21,13 @@ class GameState:
         # Company logos with absolute paths
         self.script_dir = script_dir
         self.company_logos = {
-            "Nerdniss": os.path.join(script_dir, 'nerdniss_logo.png'),
-            "Beetleguice": os.path.join(script_dir, 'beetleguice_logo.png'),
-            "StronCannon": os.path.join(script_dir, 'stroncannon_logo.png'),
-            "DebbiesKnees": os.path.join(script_dir, 'debbiesKnees_logo.png'),
-            "Pacifica": os.path.join(script_dir, 'pacifica_logo.png'),
+            "Nerdniss": os.path.join(script_dir, 'assets', 'images', 'nerdniss_logo.png'),
+            "Beetleguice": os.path.join(script_dir, 'assets', 'images', 'beetleguice_logo.png'),
+            "StronCannon": os.path.join(script_dir, 'assets', 'images', 'stroncannon_logo.png'),
+            "DebbiesKnees": os.path.join(script_dir, 'assets', 'images', 'debbiesKnees_logo.png'),
+            "Pacifica": os.path.join(script_dir, 'assets', 'images', 'pacifica_logo.png'),
         }
-        self.diamond_image_path = os.path.join(script_dir, 'diamond.png')
+        self.diamond_image_path = os.path.join(script_dir, 'assets', 'images', 'diamond.png')
 
         # Game data
         self.company_map = {}  # Maps coordinates to company info
