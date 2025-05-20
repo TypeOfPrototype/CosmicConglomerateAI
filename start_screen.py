@@ -15,7 +15,7 @@ from kivy.properties import ObjectProperty
 from kivy.clock import Clock  # Import Clock for scheduling animations
 
 # Path to your custom font
-FONT_PATH = os.path.join(os.path.dirname(__file__), 'Orbitron-Regular.ttf')
+FONT_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'fonts', 'Orbitron-Regular.ttf')
 
 
 class StartScreen(Screen):
