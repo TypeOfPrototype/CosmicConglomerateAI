@@ -338,15 +338,24 @@ class GameScreen(Screen):
         logo_path = self.game_state.company_logos.get(company_name, '')
         if os.path.exists(logo_path):
             # Use logo image
-            button.source = logo_path
-            button.reload()
+            button.source = ''  # Clear current image first
+            button.reload() # Optional: reload after clearing
+            button.source = logo_path # Set the new image
+            button.reload() # Reload the new image
             button.color = [1, 1, 1, 1]  # Reset color
             print(f"Set button source to '{logo_path}' for company '{company_name}'.")
         else:
             # Use company color
             button.source = ''  # Ensure no image is set
-            button.color = self.game_state.company_colors.get(company_name, [1, 1, 1, 1])
-            print(f"Set button color to '{self.game_state.company_colors.get(company_name, [1,1,1,1])}' for company '{company_name}'.")
+            # Assuming company_colors is a dict in game_state, if not, this will need adjustment or removal
+            # For now, let's keep a default color if company_colors is not available or company not in it.
+            default_color = [0.5, 0.5, 0.5, 1] # A neutral default color
+            if hasattr(self.game_state, 'company_colors'):
+                button.color = self.game_state.company_colors.get(company_name, default_color)
+                print(f"Set button color to '{self.game_state.company_colors.get(company_name, default_color)}' for company '{company_name}'.")
+            else:
+                button.color = default_color
+                print(f"Attribute 'company_colors' not found in game_state. Set button color to default for company '{company_name}'.")
         button.text = ""  # Remove any existing text
         button.angle = 0  # Ensure angle is reset
         button.scale_x = 1  # Reset scale
