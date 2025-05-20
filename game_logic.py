@@ -320,20 +320,15 @@ class GameState:
                 company_positions.append(c_coords)
         
         extra_value = 0
-        found_adjacency_for_this_company = False
         for company_coord in company_positions:
             r, c = company_coord
             potential_adjacent_o_markers = [
-                (r - 1, c), (r + 1, c),
-                (r, c - 1), (r, c + 1)
+                (r - 1, c), (r + 1, c),  # North, South
+                (r, c - 1), (r, c + 1)   # West, East
             ]
             for adj_coord in potential_adjacent_o_markers:
                 if adj_coord in self.initial_o_marker_locations:
-                    extra_value = 200  # Apply bonus
-                    found_adjacency_for_this_company = True
-                    break  # Found adjacency for this company_coord
-            if found_adjacency_for_this_company:
-                break  # Found adjacency for the company
+                    extra_value += 200  # Accumulate bonus for each adjacency
         
         base_value = size * 100
         total_value = base_value + extra_value
@@ -341,7 +336,7 @@ class GameState:
         self.company_info[company_name]['size'] = size
         self.company_info[company_name]['value'] = total_value
         
-        # Ensure the log message for `o_marker_bonus` correctly reflects this `extra_value`.
+        # The log message for `o_marker_bonus` should correctly reflect this accumulated `extra_value`.
         print(f"Updated company '{company_name}': size={size}, base_value={base_value}, o_marker_bonus={extra_value}, total_value={total_value}.")
 
         # Update the value in company_map entries
