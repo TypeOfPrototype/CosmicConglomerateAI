@@ -70,32 +70,49 @@ class GameScreen(Screen):
             font_size=Window.height * 0.018,
             color=(1, 1, 1, 1)
         )
-        self.player_holdings_label = Label(
-            text="Holdings:",
-            size_hint=(1, 0.5),
-            font_size=Window.height * 0.016,
-            color=(1, 1, 1, 1)
-        )
-        self.company_info_label = Label(
-            text="Company Info:",
-            size_hint=(1, 0.3),
-            font_size=Window.height * 0.016,
-            color=(1, 1, 1, 1)
-        )
 
-        self.sidebar_layout.add_widget(self.current_player_label)
-        self.sidebar_layout.add_widget(self.player_money_label)
-        self.sidebar_layout.add_widget(self.player_holdings_label)
-        self.sidebar_layout.add_widget(self.company_info_label)
-
-        # Settings button
+        # New Holdings Display Structure
+        self.holdings_title_label = Label(
+            text="[b]Holdings:[/b]",
+            markup=True,
+            size_hint=(1, 0.05),
+            font_size=Window.height * 0.018,
+            color=(1,1,1,1)
+        )
+        self.holdings_display_container = BoxLayout(
+            orientation='vertical',
+            size_hint=(1, 0.3), # Takes full width of sidebar_layout
+            spacing=5 # spacing between each holding row
+        )
+        self.total_wealth_label = Label( # Repurposed from old player_holdings_label concept
+            text="Total Wealth: £0",
+            size_hint=(1, 0.05),
+            font_size=Window.height * 0.018,
+            color=(1,1,1,1)
+        )
+        # self.company_info_label is removed as per instructions
+        self.sidebar_spacer = Label(size_hint=(1, 0.4)) # Corrected size_hint_y to make sum 1.0
+        
         self.settings_button = Button(
             text="Settings",
             size_hint=(1, 0.1),
             font_size=Window.height * 0.018 # Match other sidebar elements
         )
         self.settings_button.bind(on_press=self.open_settings_popup)
-        self.sidebar_layout.add_widget(self.settings_button)
+
+        # Clear existing widgets from sidebar_layout before adding new ones in correct order
+        self.sidebar_layout.clear_widgets() 
+        
+        # Add widgets in the specified order
+        self.sidebar_layout.add_widget(self.current_player_label)       # size_hint_y: 0.1
+        self.sidebar_layout.add_widget(self.player_money_label)        # size_hint_y: 0.1
+        self.sidebar_layout.add_widget(self.holdings_title_label)      # size_hint_y: 0.05
+        self.sidebar_layout.add_widget(self.holdings_display_container) # size_hint_y: 0.3
+        self.sidebar_layout.add_widget(self.total_wealth_label)        # size_hint_y: 0.05
+        # self.company_info_label is removed from layout
+        self.sidebar_layout.add_widget(self.sidebar_spacer)            # size_hint_y: 0.4 (corrected)
+        self.sidebar_layout.add_widget(self.settings_button)           # size_hint_y: 0.1
+                                                                        # New Total: 0.1+0.1+0.05+0.3+0.05+0.4+0.1 = 1.0
 
         self.main_layout.add_widget(self.sidebar_layout)
 
@@ -166,7 +183,7 @@ class GameScreen(Screen):
                         text=''
                     )
                     btn.bind(on_press=self.on_grid_button_press)
-                    btn.bind(on_release=self.show_company_info)
+                    # btn.bind(on_release=self.show_company_info) # Removed as per instruction
                     btn.disabled = True  # Initially, all non-circle buttons are disabled
 
                 button_row.append(btn)
@@ -727,65 +744,47 @@ class GameScreen(Screen):
         current_player = self.game_state.players[self.game_state.current_player_index]
         cash = self.game_state.player_wealth[current_player]
         holdings_value = 0
-        holdings_text = ""
 
-        # Calculate total holdings value and prepare holdings text
+        self.holdings_display_container.clear_widgets() # Clear previous holdings
+
+        # Populate new holdings display
         for company, num_shares in self.game_state.player_shares[current_player].items():
-            if company in self.game_state.company_info:
+            if company in self.game_state.company_info: # Should always be true if data is consistent
                 share_value = self.game_state.company_info[company]['value']
                 total_share_value = share_value * num_shares
                 holdings_value += total_share_value
-                holdings_text += f"{company}: {num_shares} shares @ £{share_value} each (£{total_share_value})\n"
+
+                holding_row_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=int(Window.height * 0.04))
+                
+                logo_path = self.game_state.company_logos.get(company, '')
+                if os.path.exists(logo_path):
+                    logo_widget = Image(source=logo_path, size_hint_x=0.2, allow_stretch=True, keep_ratio=True)
+                else:
+                    logo_widget = Label(text=" ", size_hint_x=0.2) # Placeholder
+                holding_row_layout.add_widget(logo_widget)
+
+                holding_detail_text = f"{company}: {num_shares} @ £{share_value} (£{total_share_value})"
+                detail_label = Label(
+                    text=holding_detail_text,
+                    size_hint_x=0.8,
+                    font_size=int(Window.height * 0.015),
+                    color=(1,1,1,1),
+                    halign='left',
+                    valign='middle'
+                )
+                detail_label.bind(size=detail_label.setter('text_size')) # For text wrapping
+                holding_row_layout.add_widget(detail_label)
+                
+                self.holdings_display_container.add_widget(holding_row_layout)
 
         total_wealth = cash + holdings_value
 
         self.current_player_label.text = f"[b]Current Player:[/b] {current_player}"
         self.player_money_label.text = f"Cash: £{cash}"
-        self.player_holdings_label.text = f"Holdings:\n{holdings_text}\nTotal Wealth: £{total_wealth}"
+        self.total_wealth_label.text = f"Total Wealth: £{total_wealth}"
+        # The old self.player_holdings_label is no longer used for this combined text.
 
-    def show_company_info(self, instance):
-        """
-        Display company information in the sidebar when a company square is clicked.
-        """
-        if isinstance(instance, ImageButton):
-            coords = instance.coords
-            if coords in self.game_state.company_map:
-                company_name = self.game_state.company_map[coords]["company_name"]
-                company_size = self.game_state.company_info[company_name]["size"]
-                company_value = self.game_state.company_info[company_name]["value"]
-                company_owner = self.game_state.company_map[coords]["owner"]
-
-                # Create a BoxLayout to hold the company info
-                info_layout = BoxLayout(orientation='vertical', spacing=10, padding=10)
-
-                # Add Company Logo
-                logo_path = self.game_state.company_logos.get(company_name, '')
-                if os.path.exists(logo_path):
-                    logo = Image(source=logo_path, size_hint=(1, 0.5), allow_stretch=True, keep_ratio=True)
-                    info_layout.add_widget(logo)
-                else:
-                    # Placeholder if logo not found
-                    logo = Label(text="No Logo", size_hint=(1, 0.5))
-                    info_layout.add_widget(logo)
-
-                # Add Textual Information
-                info_text = (
-                    f"[b]Company:[/b] {company_name}\n"
-                    f"[b]Size:[/b] {company_size}\n"
-                    f"[b]Value per Share:[/b] £{company_value}\n"
-                    f"[b]Owner:[/b] {company_owner}\n"
-                )
-                info_label = Label(text=info_text, halign='left', valign='top', markup=True)
-                info_label.bind(size=info_label.setter('text_size'))
-                info_layout.add_widget(info_label)
-
-                # Update the company info label
-                self.company_info_label.clear_widgets()
-                self.company_info_label.add_widget(info_layout)
-            else:
-                self.company_info_label.text = "Company Info:"
-        else:
-            self.company_info_label.text = "Company Info:"
+    # Removed show_company_info method as per instructions in Step 10
 
     def open_settings_popup(self, instance):
         """
@@ -866,18 +865,19 @@ class GameScreen(Screen):
             self.player_money_label.font_size = new_font_size
             
         if hasattr(self, 'player_holdings_label'):
-            self.player_holdings_label.font_size = new_font_size
+            # self.player_holdings_label is now self.total_wealth_label
+            # If there's a specific label for holdings text that needs font adjustment,
+            # it would be within holdings_display_container, and those are created dynamically.
+            # The title self.holdings_title_label could be adjusted here if needed.
+            # For now, the prompt doesn't specify changing font of dynamically created labels.
+            pass # No direct self.player_holdings_label to update font size for.
             
-        if hasattr(self, 'company_info_label'):
-            # If company_info_label contains other labels, they might need individual updates
-            # For now, updating the main container label's font_size.
-            # If it's just a text container, this is fine. If it holds other labels,
-            # those labels' font_size would also need to be adjusted, potentially by iterating
-            # through its children or having direct references.
-            # The current structure of show_company_info creates new labels each time,
-            # so this change will only affect the "Company Info:" title if it's directly set.
-            # Let's assume the intent is for the main labels controlled by GameScreen.
-            self.company_info_label.font_size = new_font_size
+        if hasattr(self, 'total_wealth_label'): # Check for the new total wealth label
+            self.total_wealth_label.font_size = new_font_size
+
+        # self.company_info_label is removed.
+        # if hasattr(self, 'company_info_label'):
+        #    self.company_info_label.font_size = new_font_size
         
         # Consider also updating font sizes of buttons or other elements if desired
         # For example, the settings popup buttons themselves, or sidebar buttons.
