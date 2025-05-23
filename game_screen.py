@@ -52,11 +52,11 @@ class GameScreen(Screen):
         # Sidebar for player information
         self.sidebar_layout = BoxLayout(
             orientation='vertical',
-            size_hint=(self.sidebar_original_width_hint, 1),  # Use the attribute for width
-            pos_hint={'x': -self.sidebar_original_width_hint, 'y': 0},  # Initial position off-screen
+            size_hint=(0, 1),
             padding=[Window.width * 0.01, Window.height * 0.01],
             spacing=Window.height * 0.01
         )
+        self.sidebar_layout.opacity = 0
         with self.sidebar_layout.canvas.before:
             Color(0, 0, 0, 1)  # Black background
             self.sidebar_rect = Rectangle(pos=self.sidebar_layout.pos, size=self.sidebar_layout.size)
@@ -914,7 +914,7 @@ class GameScreen(Screen):
         Animates the sidebar to open (slide in from the left).
         """
         self.sidebar_visible = True
-        anim = Animation(pos_hint={'x': 0, 'y': 0}, duration=0.3)
+        anim = Animation(size_hint_x=self.sidebar_original_width_hint, opacity=1, duration=0.3)
         anim.start(self.sidebar_layout)
 
     def animate_sidebar_close(self):
@@ -922,5 +922,5 @@ class GameScreen(Screen):
         Animates the sidebar to close (slide out to the left).
         """
         self.sidebar_visible = False
-        anim = Animation(pos_hint={'x': -self.sidebar_original_width_hint, 'y': 0}, duration=0.3)
+        anim = Animation(size_hint_x=0, opacity=0, duration=0.3)
         anim.start(self.sidebar_layout)
