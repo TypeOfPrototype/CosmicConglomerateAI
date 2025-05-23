@@ -38,12 +38,13 @@ class GameScreen(Screen):
         self.blinking_buttons = []
         self.blinking_animations = []
 
-    def initialize_game(self, player_names, grid_size, game_turn_length, marker_percentage=0.1):
+    def initialize_game(self, player_configurations, grid_size, game_turn_length, marker_percentage=0.1): # player_names -> player_configurations
         self.main_layout.clear_widgets()
 
         # Initialize GameState
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        self.game_state = GameState(player_names, grid_size, script_dir)
+        # Pass player_configurations directly to GameState
+        self.game_state = GameState(player_configurations, grid_size, script_dir)
         self.game_turn_length = game_turn_length  # Game turn length set by player
 
         # **Register the callback to handle GameState updates**
@@ -66,7 +67,7 @@ class GameScreen(Screen):
         )
 
         self.current_player_label = Label(
-            text=f"[b]Current Player:[/b] {player_names[0]}",
+            text=f"[b]Current Player:[/b] {self.game_state.players[0]}", # Use game_state.players
             size_hint=(1, 0.1),
             markup=True,
             font_size=Window.height * 0.02,
@@ -131,7 +132,7 @@ class GameScreen(Screen):
 
         # Info label to display player actions
         self.info_label = Label(
-            text=f"Welcome to Space Monopoly! {player_names[0]}'s Turn",
+            text=f"Welcome to Space Monopoly! {self.game_state.players[0]}'s Turn", # Use game_state.players
             size_hint=(1, 0.05),
             font_size=16,
             color=(1, 1, 1, 1)
@@ -208,7 +209,7 @@ class GameScreen(Screen):
             orientation='horizontal', size_hint=(1, 0.1), spacing=10
         )
         self.end_turn_button = Button(
-            text="End Turn", on_press=self.next_turn, font_size=18,
+            text="End Turn", on_press=self.process_human_end_turn, font_size=18, # Changed on_press
             disabled=True  # Initially disabled
         )
         self.share_management_button = Button(
@@ -304,6 +305,7 @@ class GameScreen(Screen):
         self.expand_companies_into_adjacent_diamonds()
         self.disable_grid_buttons()
         self.update_player_info()
+        self.end_turn_button.disabled = False # Enable end turn button after human move
 
     def perform_flip_animation(self, instance):
         """
@@ -440,19 +442,83 @@ class GameScreen(Screen):
         Proceed to the next player's turn.
         """
         # Disable the end turn button until a new action is taken
-        self.end_turn_button.disabled = True
-        if instance is not None:
-            self.game_state.current_player_index = (self.game_state.current_player_index + 1) % len(self.game_state.players)
-            self.game_state.turn_counter += 1
-        self.info_label.text = f"{self.game_state.players[self.game_state.current_player_index]}'s Turn"
+        self.end_turn_button.disabled = True 
+        # Removed logic for incrementing player index and turn counter (handled by GameState.end_turn())
+        
         self.update_player_info()
 
-        # Enable grid buttons based on the new turn
-        self.enable_grid_buttons()
+        current_player_name = self.game_state.players[self.game_state.current_player_index]
+        player_type = self.game_state.get_player_type(current_player_name)
+        self.info_label.text = f"{current_player_name}'s Turn ({player_type})"
+
+        if player_type == "AI (Easy)":
+            self.info_label.text += " - Thinking..."
+            self.disable_grid_buttons() # Stops blinking, disables all grid buttons
+            self.end_turn_button.disabled = True
+            Clock.schedule_once(self.run_ai_turn, 1.0) # 1 second delay
+        else: # Human player
+            self.enable_grid_buttons()
+            self.end_turn_button.disabled = True # Will be enabled once human makes a move
 
         # End game check after turn length reached
         if self.game_state.turn_counter >= self.game_turn_length:
             self.end_game()
+
+    def run_ai_turn(self, dt):
+        """
+        Executes an AI player's turn.
+        """
+        current_player_name = self.game_state.players[self.game_state.current_player_index]
+        selected_cell, action_message = self.game_state.ai_take_turn(current_player_name)
+
+        self.info_label.text = action_message # Display AI action
+
+        # Visual update for AI's move (especially if it's placing a diamond)
+        # GameState actions (create, expand, merge) should trigger handle_game_state_update for logos.
+        # Manual update for diamond visuals if place_diamond was called by AI.
+        if selected_cell and "placed a diamond" in action_message.lower(): # Check if diamond was placed
+            button = self.grid_buttons[selected_cell[0]][selected_cell[1]]
+            if os.path.exists(self.game_state.diamond_image_path):
+                button.source = self.game_state.diamond_image_path
+                button.reload()
+            else:
+                button.text = "◆"
+                button.font_size = 24
+            button.color = [1, 1, 1, 1]
+            # Optional: Add a flip animation for the diamond placement by AI
+            # self.perform_flip_animation(button) 
+
+        self.update_player_info()
+        self.expand_companies_into_adjacent_diamonds() # Important after AI move
+        self.disable_grid_buttons() # Ensure grid is disabled after AI move
+
+        success, end_turn_message = self.game_state.end_turn()
+
+        if not success:
+            self.info_label.text = f"AI Error: {end_turn_message}" # Update info label with error
+            # Potentially show a popup or handle error more gracefully
+            # For now, allowing human to see the issue and maybe End Turn button becomes active
+            self.end_turn_button.disabled = False 
+            return # Do not proceed to next turn if AI failed its turn obligation
+
+        # self.game_state.end_turn() has updated player_index and turn_counter
+        self.next_turn() # Sets up UI for the new current player (Human or AI)
+
+    def process_human_end_turn(self, instance):
+        """
+        Processes a human player's attempt to end their turn.
+        """
+        current_player_name = self.game_state.players[self.game_state.current_player_index]
+        success, message = self.game_state.end_turn()
+
+        if success:
+            self.info_label.text = message
+            self.next_turn()
+        else: # Player hasn't made a move or other end_turn condition not met
+            self.info_label.text = message
+            Popup(title='Move Required', 
+                  content=Label(text=message), 
+                  size_hint=(0.5, 0.3)).open()
 
     def buy_shares(self, company_name, player, amount):
         """

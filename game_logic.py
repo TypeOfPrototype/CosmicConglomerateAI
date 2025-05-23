@@ -1,11 +1,13 @@
 # game_logic.py
 
 import os
+import random # Added random import
 from collections import deque
 
 class GameState:
-    def __init__(self, players, grid_size, script_dir):
-        self.players = players
+    def __init__(self, player_configurations, grid_size, script_dir): # Changed players to player_configurations
+        self.players = [p['name'] for p in player_configurations] # Extract player names
+        self.player_types = {p['name']: p['type'] for p in player_configurations} # Store player types
         self.grid_size = grid_size  # (rows, cols)
         self.current_player_index = 0
         self.company_count = 0
@@ -589,5 +591,82 @@ class GameState:
             self.turn_counter += 1
             print(f"Turn ended. It's now {self.players[self.current_player_index]}'s turn.")
             return True, f"Turn ended. It's now {self.players[self.current_player_index]}'s turn."
+
+    def get_player_type(self, player_name):
+        """
+        Returns the type of the given player.
+        """
+        return self.player_types.get(player_name)
+
+    def ai_take_turn(self, player_name):
+        """
+        Allows an AI player to take a turn.
+        """
+        current_player = player_name
+        available_cells = []
+        # Iterate c from 0 to self.grid_size[1]-1 (cols) and r from 0 to self.grid_size[0]-1 (rows)
+        for r in range(self.grid_size[0]): # rows
+            for c in range(self.grid_size[1]): # cols
+                cell = (r, c)
+                if cell not in self.company_map and \
+                   cell not in self.diamond_positions and \
+                   cell not in self.initial_o_marker_locations:
+                    available_cells.append(cell)
+
+        if not available_cells:
+            print(f"Error: No valid moves for AI player {current_player}.")
+            self.player_has_moved[current_player] = True # No moves, so effectively turn is over.
+            return None, "No valid moves for AI."
+
+        selected_cell = random.choice(available_cells)
+        print(f"AI {current_player} selected cell: {selected_cell}")
+
+        adj_companies = self.get_adjacent_companies(selected_cell)
+        action_taken_message = ""
+
+        if adj_companies:
+            if len(adj_companies) == 1:
+                company_to_expand = list(adj_companies)[0]
+                self.expand_company(selected_cell, company_to_expand, current_player)
+                # expand_company sets player_has_moved
+                action_taken_message = f"{current_player} (AI) expanded {company_to_expand} at {selected_cell}."
+            else: # Multiple adjacent companies
+                self.merge_companies(selected_cell, adj_companies, current_player)
+                # merge_companies sets player_has_moved
+                # Assuming merge_companies updates company_map for selected_cell correctly
+                if selected_cell in self.company_map:
+                    merged_company_name = self.company_map[selected_cell]["company_name"]
+                    action_taken_message = f"{current_player} (AI) merged companies into {merged_company_name} at {selected_cell}."
+                else:
+                    # This case might occur if merge_companies resulted in a new company formation
+                    # from diamonds and the selected_cell itself wasn't directly part of the final company map key
+                    # or if the merge logic needs adjustment for what 'selected_cell' becomes.
+                    # For now, a generic message if the company name can't be retrieved directly.
+                    action_taken_message = f"{current_player} (AI) initiated a merge at {selected_cell}."
+        else: # No adjacent companies
+            if self.available_company_names:
+                new_company_name, message = self.create_new_company(selected_cell, current_player)
+                # create_new_company sets player_has_moved if successful
+                if new_company_name:
+                    action_taken_message = f"{current_player} (AI) created {new_company_name} at {selected_cell}."
+                else:
+                    # Failed to create company (e.g. on 'O' marker - though filtered, or no names)
+                    # If create_new_company fails, player_has_moved is not set by it.
+                    success, diamond_message = self.place_diamond(selected_cell, current_player)
+                    # place_diamond sets player_has_moved
+                    action_taken_message = f"{current_player} (AI) placed a diamond at {selected_cell}. ({diamond_message})"
+            else: # No available company names
+                success, diamond_message = self.place_diamond(selected_cell, current_player)
+                # place_diamond sets player_has_moved
+                action_taken_message = f"{current_player} (AI) placed a diamond at {selected_cell}. ({diamond_message})"
+        
+        # Ensure player_has_moved is true, though individual actions should handle this.
+        # This is a safeguard.
+        if not self.player_has_moved[current_player]:
+             self.player_has_moved[current_player] = True
+             print(f"Warning: player_has_moved was not set by action for AI {current_player} at {selected_cell}. Forcing True.")
+
+        print(action_taken_message) # For debugging
+        return selected_cell, action_taken_message
 
     # Additional methods can be added below as needed
