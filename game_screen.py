@@ -914,6 +914,7 @@ class GameScreen(Screen):
         Animates the sidebar to open (slide in from the left).
         """
         self.sidebar_visible = True
+        self.game_layout.size_hint_x = 1 - self.sidebar_original_width_hint
         anim = Animation(size_hint_x=self.sidebar_original_width_hint, opacity=1, duration=0.3)
         anim.start(self.sidebar_layout)
 
@@ -922,5 +923,6 @@ class GameScreen(Screen):
         Animates the sidebar to close (slide out to the left).
         """
         self.sidebar_visible = False
+        self.game_layout.size_hint_x = 1.0
         anim = Animation(size_hint_x=0, opacity=0, duration=0.3)
         anim.start(self.sidebar_layout)
