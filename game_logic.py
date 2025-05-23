@@ -614,9 +614,9 @@ class GameState:
                     available_cells.append(cell)
 
         if not available_cells:
-            print(f"Error: No valid moves for AI player {current_player}.")
-            self.player_has_moved[current_player] = True # No moves, so effectively turn is over.
-            return None, "No valid moves for AI."
+            print(f"AI Warning: No available cells for {player_name} to make a move.") # Changed print message
+            self.player_has_moved[player_name] = True # Allow turn to pass
+            return None, f"{player_name} (AI) has no available moves." # Changed returned message
 
         selected_cell = random.choice(available_cells)
         print(f"AI {current_player} selected cell: {selected_cell}")

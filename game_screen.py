@@ -473,20 +473,31 @@ class GameScreen(Screen):
 
         self.info_label.text = action_message # Display AI action
 
-        # Visual update for AI's move (especially if it's placing a diamond)
-        # GameState actions (create, expand, merge) should trigger handle_game_state_update for logos.
-        # Manual update for diamond visuals if place_diamond was called by AI.
-        if selected_cell and "placed a diamond" in action_message.lower(): # Check if diamond was placed
-            button = self.grid_buttons[selected_cell[0]][selected_cell[1]]
-            if os.path.exists(self.game_state.diamond_image_path):
-                button.source = self.game_state.diamond_image_path
-                button.reload()
-            else:
-                button.text = "◆"
-                button.font_size = 24
-            button.color = [1, 1, 1, 1]
-            # Optional: Add a flip animation for the diamond placement by AI
-            # self.perform_flip_animation(button) 
+        # Visual Update for AI's move (specifically for diamonds, as company updates are handled by callback)
+        if selected_cell is not None and \
+           0 <= selected_cell[0] < self.grid_size[1] and \
+           0 <= selected_cell[1] < self.grid_size[0]:
+            
+            # If it's not a company tile after AI's move, then it might be a diamond
+            # Company tiles are updated by the callback handle_game_state_update.
+            if selected_cell not in self.game_state.company_map: 
+                button = self.grid_buttons[selected_cell[0]][selected_cell[1]]
+                if os.path.exists(self.game_state.diamond_image_path):
+                    button.source = self.game_state.diamond_image_path
+                    button.reload()
+                else:
+                    button.text = "◆"
+                    button.font_size = 24
+                button.color = [1, 1, 1, 1]
+                print(f"AI Debug: Updated button {selected_cell} for diamond after AI turn.")
+            # If it IS in company_map, the callback will handle it.
+
+        elif selected_cell is not None: # selected_cell was not None, but was out of bounds
+            print(f"AI Error: selected_cell {selected_cell} is out of bounds for the grid. Rows: {self.grid_size[1]}, Cols: {self.grid_size[0]}")
+            # info_label is already set by action_message.
+            
+        # If selected_cell is None, info_label already has a message like "no available moves".
+        # Nothing specific to do for visuals if selected_cell is None.
 
         self.update_player_info()
         self.expand_companies_into_adjacent_diamonds() # Important after AI move
