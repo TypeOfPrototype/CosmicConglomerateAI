@@ -208,11 +208,11 @@ class StartScreen(Screen):
                     name = f"Player {i + 1}"
                 player_names.append(name)
 
-        if len(player_names) < 2:
-            # Display an error popup if fewer than 2 players are selected
+        if len(player_names) < 1:
+            # Display an error popup if fewer than 1 player is selected
             error_popup = Popup(
                 title='Error',
-                content=Label(text='At least 2 players must be selected.'),
+                content=Label(text='At least 1 player must be selected.'),
                 size_hint=(0.6, 0.4)
             )
             error_popup.open()
