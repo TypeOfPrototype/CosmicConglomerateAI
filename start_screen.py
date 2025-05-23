@@ -9,6 +9,7 @@ from kivy.uix.spinner import Spinner
 from kivy.uix.slider import Slider
 from kivy.uix.button import Button
 from kivy.uix.popup import Popup
+from kivy.uix.checkbox import CheckBox
 from kivy.graphics import Color, Rectangle, RoundedRectangle
 from kivy.core.window import Window
 from kivy.animation import Animation
@@ -49,12 +50,25 @@ class StartScreen(Screen):
 
         # Player configuration inputs
         self.player_inputs = []
+        self.player_checkboxes = [] # Initialize player_checkboxes list
         players_layout = BoxLayout(orientation='vertical', size_hint=(1, 0.3), spacing=10)
         for i in range(4):
+            player_row_layout = BoxLayout(orientation='horizontal', spacing=10, size_hint_y=None, height=40) # Create player_row_layout
+            checkbox = CheckBox(size_hint_x=None, width=40) # Create checkbox
+
+            if i == 0: # Player 1
+                checkbox.active = True
+                checkbox.disabled = True
+            elif i == 1: # Player 2
+                checkbox.active = True
+            
+            self.player_checkboxes.append(checkbox) # Add checkbox to list
+            player_row_layout.add_widget(checkbox) # Add checkbox to player_row_layout
+
             player_input = TextInput(
                 hint_text=f'Player {i + 1} Name',
-                size_hint=(1, None),
-                height=40,
+                size_hint=(1, 1), # Modified size_hint
+                # height=40, # Removed height
                 multiline=False,
                 font_size=20,
                 padding=(10, 10),
@@ -62,8 +76,9 @@ class StartScreen(Screen):
                 background_color=(0.2, 0.2, 0.2, 1),
                 foreground_color=(1, 1, 1, 1)  # Updated property name
             )
+            player_row_layout.add_widget(player_input) # Add player_input to player_row_layout
             self.player_inputs.append(player_input)
-            players_layout.add_widget(player_input)
+            players_layout.add_widget(player_row_layout) # Add player_row_layout to players_layout
         layout.add_widget(players_layout)
 
         # Grid size selection
@@ -186,18 +201,18 @@ class StartScreen(Screen):
     def start_game(self, instance):
         # Retrieve player names
         player_names = []
-        for idx, input_field in enumerate(self.player_inputs):
-            name = input_field.text.strip()
-            if name:
+        for i in range(4): # Or use enumerate if you prefer
+            if self.player_checkboxes[i].active:
+                name = self.player_inputs[i].text.strip()
+                if not name:
+                    name = f"Player {i + 1}"
                 player_names.append(name)
-            else:
-                if idx < 2:  # Ensure at least two players
-                    player_names.append(f"Player {idx + 1}")
-        if len(player_names) < 2:
-            # Display an error popup if fewer than 2 players are entered
+
+        if len(player_names) < 1:
+            # Display an error popup if fewer than 1 player is selected
             error_popup = Popup(
                 title='Error',
-                content=Label(text='At least 2 players are required to start the game.'),
+                content=Label(text='At least 1 player must be selected.'),
                 size_hint=(0.6, 0.4)
             )
             error_popup.open()
