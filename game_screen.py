@@ -126,7 +126,7 @@ class GameScreen(Screen):
 
         # Game board layout
         self.game_layout = BoxLayout(
-            orientation='vertical', size_hint=(0.75, 1), padding=10, spacing=10
+            orientation='vertical', size_hint=(1.0, 1), padding=10, spacing=10
         )
 
         # Info label to display player actions
@@ -899,6 +899,14 @@ class GameScreen(Screen):
         # that method would also need to be aware of the current global font size setting.
         # This current implementation changes font_size for labels directly managed by GameScreen.
 
+    def _trigger_grid_layout_update(self, animation, widget):
+        # It's good practice to check if the layouts exist, though they should.
+        if hasattr(self, 'game_layout') and self.game_layout:
+            self.game_layout.do_layout()
+        if hasattr(self, 'grid_layout') and self.grid_layout:
+            self.grid_layout.do_layout()
+        print("Triggered grid layout update via on_complete") # Optional: for debugging
+
     def toggle_sidebar(self, instance):
         """
         Toggles the visibility of the sidebar with an animation.
@@ -914,7 +922,9 @@ class GameScreen(Screen):
         Animates the sidebar to open (slide in from the left).
         """
         self.sidebar_visible = True
+        self.game_layout.size_hint_x = 1 - self.sidebar_original_width_hint
         anim = Animation(size_hint_x=self.sidebar_original_width_hint, opacity=1, duration=0.3)
+        anim.bind(on_complete=self._trigger_grid_layout_update) # New line
         anim.start(self.sidebar_layout)
 
     def animate_sidebar_close(self):
@@ -922,5 +932,7 @@ class GameScreen(Screen):
         Animates the sidebar to close (slide out to the left).
         """
         self.sidebar_visible = False
+        self.game_layout.size_hint_x = 1.0
         anim = Animation(size_hint_x=0, opacity=0, duration=0.3)
+        anim.bind(on_complete=self._trigger_grid_layout_update) # New line
         anim.start(self.sidebar_layout)
