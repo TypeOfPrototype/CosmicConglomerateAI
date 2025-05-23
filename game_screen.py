@@ -29,6 +29,10 @@ class GameScreen(Screen):
         self.main_layout = BoxLayout(orientation='horizontal')
         self.add_widget(self.main_layout)
 
+        # Initialize sidebar visibility and original width
+        self.sidebar_visible = False
+        self.sidebar_original_width_hint = 0.3
+
         # Initialize properties for blinking
         self.blink_event = None
         self.blinking_buttons = []
@@ -47,7 +51,11 @@ class GameScreen(Screen):
 
         # Sidebar for player information
         self.sidebar_layout = BoxLayout(
-            orientation='vertical', size_hint=(0.3, 1), padding=[Window.width * 0.01, Window.height * 0.01], spacing=Window.height * 0.01
+            orientation='vertical',
+            size_hint=(self.sidebar_original_width_hint, 1),  # Use the attribute for width
+            pos_hint={'x': -self.sidebar_original_width_hint, 'y': 0},  # Initial position off-screen
+            padding=[Window.width * 0.01, Window.height * 0.01],
+            spacing=Window.height * 0.01
         )
         with self.sidebar_layout.canvas.before:
             Color(0, 0, 0, 1)  # Black background
@@ -206,8 +214,12 @@ class GameScreen(Screen):
         self.share_management_button = Button(
             text="Share Management", on_press=self.show_share_management_popup, font_size=18
         )
+        self.toggle_sidebar_button = Button(
+            text="Toggle Sidebar", on_press=self.toggle_sidebar, font_size=18
+        )
         button_layout.add_widget(self.end_turn_button)
         button_layout.add_widget(self.share_management_button)
+        button_layout.add_widget(self.toggle_sidebar_button)
         self.game_layout.add_widget(button_layout)
 
         self.main_layout.add_widget(self.game_layout)
@@ -886,3 +898,29 @@ class GameScreen(Screen):
         # Note: If labels within show_company_info popup need dynamic font updates,
         # that method would also need to be aware of the current global font size setting.
         # This current implementation changes font_size for labels directly managed by GameScreen.
+
+    def toggle_sidebar(self, instance):
+        """
+        Toggles the visibility of the sidebar with an animation.
+        The 'instance' argument is passed by Kivy when a button calls this method.
+        """
+        if self.sidebar_visible:
+            self.animate_sidebar_close()
+        else:
+            self.animate_sidebar_open()
+
+    def animate_sidebar_open(self):
+        """
+        Animates the sidebar to open (slide in from the left).
+        """
+        self.sidebar_visible = True
+        anim = Animation(pos_hint={'x': 0, 'y': 0}, duration=0.3)
+        anim.start(self.sidebar_layout)
+
+    def animate_sidebar_close(self):
+        """
+        Animates the sidebar to close (slide out to the left).
+        """
+        self.sidebar_visible = False
+        anim = Animation(pos_hint={'x': -self.sidebar_original_width_hint, 'y': 0}, duration=0.3)
+        anim.start(self.sidebar_layout)
