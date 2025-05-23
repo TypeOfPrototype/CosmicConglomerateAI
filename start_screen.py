@@ -49,36 +49,57 @@ class StartScreen(Screen):
         layout.add_widget(self.title_label)
 
         # Player configuration inputs
-        self.player_inputs = []
-        self.player_checkboxes = [] # Initialize player_checkboxes list
+        self.player_configs = []
         players_layout = BoxLayout(orientation='vertical', size_hint=(1, 0.3), spacing=10)
+        player_types = ["Off", "Human", "AI (Easy)"]
+        default_configs = [
+            {"type": "Human", "name": "Player 1"},
+            {"type": "Human", "name": "Player 2"},
+            {"type": "Off", "name": ""},
+            {"type": "Off", "name": ""}
+        ]
+
         for i in range(4):
-            player_row_layout = BoxLayout(orientation='horizontal', spacing=10, size_hint_y=None, height=40) # Create player_row_layout
-            checkbox = CheckBox(size_hint_x=None, width=40) # Create checkbox
+            player_row_layout = BoxLayout(orientation='horizontal', spacing=10, size_hint_y=None, height=40)
 
-            if i == 0: # Player 1
-                checkbox.active = True
-                checkbox.disabled = True
-            elif i == 1: # Player 2
-                checkbox.active = True
-            
-            self.player_checkboxes.append(checkbox) # Add checkbox to list
-            player_row_layout.add_widget(checkbox) # Add checkbox to player_row_layout
+            type_spinner = Spinner(
+                text=default_configs[i]["type"],
+                values=player_types,
+                size_hint_x=0.4,
+                font_size=18, # Adjusted font size
+                background_normal='',
+                background_color=(0.2, 0.2, 0.2, 1),
+                color=(1, 1, 1, 1),
+                font_name=FONT_PATH
+            )
 
-            player_input = TextInput(
+            name_input = TextInput(
                 hint_text=f'Player {i + 1} Name',
-                size_hint=(1, 1), # Modified size_hint
-                # height=40, # Removed height
+                text=default_configs[i]["name"],
+                size_hint_x=0.6,
                 multiline=False,
-                font_size=20,
+                font_size=18, # Adjusted font size
                 padding=(10, 10),
                 background_normal='',
                 background_color=(0.2, 0.2, 0.2, 1),
-                foreground_color=(1, 1, 1, 1)  # Updated property name
+                foreground_color=(1, 1, 1, 1)
             )
-            player_row_layout.add_widget(player_input) # Add player_input to player_row_layout
-            self.player_inputs.append(player_input)
-            players_layout.add_widget(player_row_layout) # Add player_row_layout to players_layout
+
+            # Set initial state of TextInput based on Spinner
+            if default_configs[i]["type"] == "Off":
+                name_input.disabled = True
+                name_input.text = ""
+            else:
+                name_input.disabled = False
+
+            # Bind spinner change to a callback
+            type_spinner.bind(text=lambda spinner, text, p_index=i: self._on_player_type_change(spinner, text, p_index))
+
+            player_row_layout.add_widget(type_spinner)
+            player_row_layout.add_widget(name_input)
+            players_layout.add_widget(player_row_layout)
+            self.player_configs.append({'type_spinner': type_spinner, 'name_input': name_input})
+
         layout.add_widget(players_layout)
 
         # Grid size selection
@@ -185,6 +206,18 @@ class StartScreen(Screen):
     def _update_marker_percentage_label(self, instance, value):
         self.marker_percentage_value_label.text = f"{int(value)}%"
 
+    def _on_player_type_change(self, spinner, text, player_index):
+        name_input = self.player_configs[player_index]['name_input']
+        if text == "Off":
+            name_input.disabled = True
+            name_input.text = ""
+        else:
+            name_input.disabled = False
+            if text == "Human":
+                name_input.text = f"Player {player_index + 1}"
+            elif text == "AI (Easy)":
+                name_input.text = f"AI {player_index + 1} (Easy)"
+
     def animate_widgets(self):
         # Fade in the title
         title_animation = Animation(color=(1, 0.9, 0.3, 1), duration=2)
@@ -199,20 +232,25 @@ class StartScreen(Screen):
         Clock.schedule_once(start_button_fade_in, 1)  # 1-second delay
 
     def start_game(self, instance):
-        # Retrieve player names
-        player_names = []
-        for i in range(4): # Or use enumerate if you prefer
-            if self.player_checkboxes[i].active:
-                name = self.player_inputs[i].text.strip()
-                if not name:
-                    name = f"Player {i + 1}"
-                player_names.append(name)
+        player_configurations = []
+        for i, config in enumerate(self.player_configs):
+            player_type = config['type_spinner'].text
+            player_name = config['name_input'].text.strip()
 
-        if len(player_names) < 1:
-            # Display an error popup if fewer than 1 player is selected
+            if player_type != "Off":
+                if not player_name: # Default name if empty
+                    if player_type == "Human":
+                        player_name = f"Player {i + 1}"
+                    elif player_type == "AI (Easy)":
+                        player_name = f"AI {i + 1} (Easy)"
+                
+                player_configurations.append({'name': player_name, 'type': player_type})
+
+        if len(player_configurations) < 1:
+            # Display an error popup if fewer than 1 active player
             error_popup = Popup(
                 title='Error',
-                content=Label(text='At least 1 player must be selected.'),
+                content=Label(text='At least one player (Human or AI) must be active.'),
                 size_hint=(0.6, 0.4)
             )
             error_popup.open()
@@ -244,5 +282,5 @@ class StartScreen(Screen):
         self.manager.current = 'game'
         marker_percentage = self.marker_percentage_slider.value / 100.0
         self.manager.get_screen('game').initialize_game(
-            player_names, (cols, rows), game_turn_length, marker_percentage
+            player_configurations, (cols, rows), game_turn_length, marker_percentage
         )
