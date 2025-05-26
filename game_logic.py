@@ -625,48 +625,84 @@ class GameState:
         action_taken_message = ""
 
         if adj_companies:
+            # ... existing logic for expanding or merging ...
             if len(adj_companies) == 1:
                 company_to_expand = list(adj_companies)[0]
                 self.expand_company(selected_cell, company_to_expand, current_player)
-                # expand_company sets player_has_moved
                 action_taken_message = f"{current_player} (AI) expanded {company_to_expand} at {selected_cell}."
             else: # Multiple adjacent companies
                 self.merge_companies(selected_cell, adj_companies, current_player)
-                # merge_companies sets player_has_moved
-                # Assuming merge_companies updates company_map for selected_cell correctly
                 if selected_cell in self.company_map:
                     merged_company_name = self.company_map[selected_cell]["company_name"]
                     action_taken_message = f"{current_player} (AI) merged companies into {merged_company_name} at {selected_cell}."
                 else:
-                    # This case might occur if merge_companies resulted in a new company formation
-                    # from diamonds and the selected_cell itself wasn't directly part of the final company map key
-                    # or if the merge logic needs adjustment for what 'selected_cell' becomes.
-                    # For now, a generic message if the company name can't be retrieved directly.
                     action_taken_message = f"{current_player} (AI) initiated a merge at {selected_cell}."
-        else: # No adjacent companies
-            if self.available_company_names:
-                new_company_name, message = self.create_new_company(selected_cell, current_player)
-                # create_new_company sets player_has_moved if successful
-                if new_company_name:
-                    action_taken_message = f"{current_player} (AI) created {new_company_name} at {selected_cell}."
-                else:
-                    # Failed to create company (e.g. on 'O' marker - though filtered, or no names)
-                    # If create_new_company fails, player_has_moved is not set by it.
-                    success, diamond_message = self.place_diamond(selected_cell, current_player)
-                    # place_diamond sets player_has_moved
-                    action_taken_message = f"{current_player} (AI) placed a diamond at {selected_cell}. ({diamond_message})"
-            else: # No available company names
-                success, diamond_message = self.place_diamond(selected_cell, current_player)
-                # place_diamond sets player_has_moved
-                action_taken_message = f"{current_player} (AI) placed a diamond at {selected_cell}. ({diamond_message})"
-        
-        # Ensure player_has_moved is true, though individual actions should handle this.
-        # This is a safeguard.
-        if not self.player_has_moved[current_player]:
-             self.player_has_moved[current_player] = True
-             print(f"Warning: player_has_moved was not set by action for AI {current_player} at {selected_cell}. Forcing True.")
+    else: # No adjacent companies to selected_cell
+        if self.available_company_names and self._can_found_company_at(selected_cell):
+            # Try to create a new company
+            new_company_name, message = self.create_new_company(selected_cell, current_player)
+            if new_company_name:
+                action_taken_message = f"{current_player} (AI) created {new_company_name} at {selected_cell}."
+                # self.player_has_moved is set by create_new_company if successful
+            else:
+                # create_new_company failed (e.g., cell was an 'O' marker, or other reason from message)
+                # Fallback to placing a diamond
+                # Ensure player_has_moved is set if create_new_company failed before setting it
+                if not self.player_has_moved[current_player]: # Check if create_new_company might have failed early
+                    self.player_has_moved[current_player] = True # Tentatively set, place_diamond might confirm or game_screen will handle
 
-        print(action_taken_message) # For debugging
-        return selected_cell, action_taken_message
+                success, diamond_message = self.place_diamond(selected_cell, current_player)
+                if success:
+                    action_taken_message = f"{current_player} (AI) placed a diamond at {selected_cell}. ({diamond_message})"
+                else:
+                    action_taken_message = f"{current_player} (AI) failed to make a move at {selected_cell} after failing to create company. ({diamond_message})"
+                    # Ensure player_has_moved is robustly set, place_diamond should handle its own success/failure regarding this flag.
+                    # If place_diamond also fails, it should still ensure player_has_moved is true.
+        else:
+            # Cannot found a company (no names or no valid adjacency), so place a diamond
+            # Ensure player_has_moved is set if the path leading here didn't set it
+            if not self.player_has_moved[current_player]:
+                 self.player_has_moved[current_player] = True # Tentatively set
+
+            success, diamond_message = self.place_diamond(selected_cell, current_player)
+            if success:
+                action_taken_message = f"{current_player} (AI) placed a diamond at {selected_cell}. ({diamond_message})"
+            else:
+                action_taken_message = f"{current_player} (AI) failed to place diamond at {selected_cell}. ({diamond_message})"
+    
+    # Ensure player_has_moved is True if any action was attempted or if AI decided to pass.
+    # The individual calls (create_new_company, place_diamond, expand_company, merge_companies)
+    # are responsible for setting self.player_has_moved[current_player] = True upon successful action.
+    # If ai_take_turn reaches this point and no action successfully set it,
+    # it implies a possible path where an action was attempted but failed in a way that didn't set the flag,
+    # or the AI decided to do nothing (which it currently doesn't).
+    # The robust check for empty available_cells already handles setting this flag if no move is possible at all.
+    # If, after all logic, player_has_moved is STILL false, it's a bug.
+    # However, the above logic tries to ensure it's set if any operation is attempted.
+    # Let's rely on the action methods themselves or the initial "no available cells" check.
+    
+    print(action_taken_message) # Keep for debugging
+    return selected_cell, action_taken_message
+
+    def _can_found_company_at(self, coords):
+        row, col = coords
+        # Define orthogonal neighbors
+        potential_neighbors = [
+            (row - 1, col), (row + 1, col), # North, South
+            (row, col - 1), (row, col + 1)   # West, East
+        ]
+
+        for r_neighbor, c_neighbor in potential_neighbors:
+            # Check grid boundaries for the neighbor
+            # Assuming self.grid_size = (cols, rows) as per subtask note for this method
+            if 0 <= r_neighbor < self.grid_size[1] and 0 <= c_neighbor < self.grid_size[0]:
+                neighbor_coords = (r_neighbor, c_neighbor)
+                if neighbor_coords in self.company_map:
+                    return True # Adjacent to an existing company
+                if neighbor_coords in self.diamond_positions:
+                    return True # Adjacent to a diamond
+                if neighbor_coords in self.initial_o_marker_locations:
+                    return True # Adjacent to an 'O' marker
+        return False # No qualifying adjacencies found
 
     # Additional methods can be added below as needed

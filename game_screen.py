@@ -284,22 +284,49 @@ class GameScreen(Screen):
                 self.info_label.text = f"{current_player} merged companies into {merged_company_name}!"
                 # Perform flip animation upon merging
                 self.perform_flip_animation(instance)
-        else:
-            # No adjacent companies
-            if self.game_state.available_company_names and self.is_adjacent_to(current_coords, ["O", "X", "◆"]):
+        else: # No adjacent companies
+            # current_player is already defined in this scope
+            if self.game_state.available_company_names and self.game_state._can_found_company_at(current_coords):
                 # Create a new company
                 company_name, message = self.game_state.create_new_company(current_coords, current_player)
                 if company_name:
-                    # The UI will be updated via the callback
+                    # The UI will be updated via the callback from create_new_company
                     self.info_label.text = message
-                    # Perform flip animation upon creation
-                    self.perform_flip_animation(instance)
+                    self.perform_flip_animation(instance) # instance is the button
                 else:
+                    # create_new_company failed (e.g. trying to create on 'O' marker itself)
                     self.info_label.text = message
-            else:
+                    # Potentially place diamond if creation failed?
+                    # For now, let's assume if _can_found_company_at was true, but create_new_company failed,
+                    # it's a specific rule interaction (like on 'O' marker) and not a diamond placement.
+                    # The original human logic didn't have a fallback to diamond here if is_adjacent_to was true.
+                    # However, the AI logic *does* fallback. For consistency, maybe human should too.
+                    # Let's make it consistent: if create_new_company fails, human also tries diamond.
+                    if "Cannot create company on an 'O' marker tile" in message: # Or similar check
+                        self.info_label.text = message + " Try placing a diamond." # Guide user
+                        # No automatic diamond placement here, user must click again if they want diamond.
+                        # Button will be disabled after this interaction by disable_grid_buttons().
+                        # This makes it less like AI, but gives human more control after failure.
+                        pass
+                    # If create_new_company failed for other reasons (e.g. no names), message is already set.
+            else: # No available company names or cannot found company at current_coords
                 # Place a diamond
-                self.place_diamond(instance)
-                self.info_label.text = f"{current_player} placed a diamond."
+                self.place_diamond(instance) # instance is the button
+                # self.info_label.text is set by place_diamond or its callers if needed.
+                # For direct call here, we might need:
+                # self.info_label.text = f"{current_player} placed a diamond."
+                # However, self.place_diamond itself calls game_state.place_diamond which returns a message.
+                # The current self.place_diamond(self, instance) in GameScreen:
+                #   success, message = self.game_state.place_diamond(current_coords, current_player_name)
+                #   if success: # updates visuals
+                #   else: self.info_label.text = message
+                # This seems fine. If place_diamond fails, it sets info_label. If it succeeds, a message is not explicitly set here,
+                # but game_state.place_diamond does return one. Let's ensure a generic success message if place_diamond itself doesn't set one.
+                # Checking place_diamond: it *does not* set info_label on success.
+                # So we should set it here.
+                if instance.source == self.game_state.diamond_image_path or instance.text == "◆": # Check if diamond was actually placed
+                     self.info_label.text = f"{current_player} placed a diamond at {current_coords}."
+                # If place_diamond failed, it will have set its own error message.
 
         # After the move, expand companies into adjacent diamonds
         self.expand_companies_into_adjacent_diamonds()
@@ -417,25 +444,6 @@ class GameScreen(Screen):
                  delattr(button, 'anim')
         button.disabled = True
         print(f"Button at ({button.coords[0]}, {button.coords[1]}) properties reset and disabled.")
-
-    def is_adjacent_to(self, coords, types):
-        """
-        Check if the given coordinates are adjacent to specified types.
-        Types can include text indicators or companies.
-        """
-        row, col = coords
-        adjacent_cells = [
-            (row - 1, col), (row + 1, col),
-            (row, col - 1), (row, col + 1)
-        ]
-        for r, c in adjacent_cells:
-            if 0 <= r < self.grid_size[1] and 0 <= c < self.grid_size[0]:
-                button = self.grid_buttons[r][c]
-                if button.text in types:
-                    return True
-                elif "Company" in types and (r, c) in self.game_state.company_map:
-                    return True
-        return False
 
     def next_turn(self, instance=None):
         """
@@ -872,8 +880,6 @@ class GameScreen(Screen):
         self.player_money_label.text = f"Cash: £{cash}"
         self.total_wealth_label.text = f"Total Wealth: £{total_wealth}"
         # The old self.player_holdings_label is no longer used for this combined text.
-
-    # Removed show_company_info method as per instructions in Step 10
 
     def open_settings_popup(self, instance):
         """
