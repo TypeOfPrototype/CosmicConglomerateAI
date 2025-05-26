@@ -637,10 +637,10 @@ class GameState:
                     action_taken_message = f"{current_player} (AI) merged companies into {merged_company_name} at {selected_cell}."
                 else:
                     action_taken_message = f"{current_player} (AI) initiated a merge at {selected_cell}."
-    else: # No adjacent companies to selected_cell
-        if self.available_company_names and self._can_found_company_at(selected_cell):
-            # Try to create a new company
-            new_company_name, message = self.create_new_company(selected_cell, current_player)
+        else: # No adjacent companies to selected_cell
+            if self.available_company_names and self._can_found_company_at(selected_cell):
+                # Try to create a new company
+                new_company_name, message = self.create_new_company(selected_cell, current_player)
             if new_company_name:
                 action_taken_message = f"{current_player} (AI) created {new_company_name} at {selected_cell}."
                 # self.player_has_moved is set by create_new_company if successful
@@ -658,20 +658,20 @@ class GameState:
                     action_taken_message = f"{current_player} (AI) failed to make a move at {selected_cell} after failing to create company. ({diamond_message})"
                     # Ensure player_has_moved is robustly set, place_diamond should handle its own success/failure regarding this flag.
                     # If place_diamond also fails, it should still ensure player_has_moved is true.
-        else:
-            # Cannot found a company (no names or no valid adjacency), so place a diamond
-            # Ensure player_has_moved is set if the path leading here didn't set it
-            if not self.player_has_moved[current_player]:
-                 self.player_has_moved[current_player] = True # Tentatively set
-
-            success, diamond_message = self.place_diamond(selected_cell, current_player)
-            if success:
-                action_taken_message = f"{current_player} (AI) placed a diamond at {selected_cell}. ({diamond_message})"
             else:
-                action_taken_message = f"{current_player} (AI) failed to place diamond at {selected_cell}. ({diamond_message})"
-    
-    # Ensure player_has_moved is True if any action was attempted or if AI decided to pass.
-    # The individual calls (create_new_company, place_diamond, expand_company, merge_companies)
+                # Cannot found a company (no names or no valid adjacency), so place a diamond
+                # Ensure player_has_moved is set if the path leading here didn't set it
+                if not self.player_has_moved[current_player]:
+                     self.player_has_moved[current_player] = True # Tentatively set
+
+                success, diamond_message = self.place_diamond(selected_cell, current_player)
+                if success:
+                    action_taken_message = f"{current_player} (AI) placed a diamond at {selected_cell}. ({diamond_message})"
+                else:
+                    action_taken_message = f"{current_player} (AI) failed to place diamond at {selected_cell}. ({diamond_message})"
+        
+        # Ensure player_has_moved is True if any action was attempted or if AI decided to pass.
+        # The individual calls (create_new_company, place_diamond, expand_company, merge_companies)
     # are responsible for setting self.player_has_moved[current_player] = True upon successful action.
     # If ai_take_turn reaches this point and no action successfully set it,
     # it implies a possible path where an action was attempted but failed in a way that didn't set the flag,
