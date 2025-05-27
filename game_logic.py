@@ -638,32 +638,26 @@ class GameState:
                 else:
                     action_taken_message = f"{current_player} (AI) initiated a merge at {selected_cell}."
         else: # No adjacent companies to selected_cell
-            if self.available_company_names and self._can_found_company_at(selected_cell):
-                # Try to create a new company
+            if self.available_company_names and self._can_found_company_at(selected_cell): # Condition A
                 new_company_name, message = self.create_new_company(selected_cell, current_player)
-            if new_company_name:
-                action_taken_message = f"{current_player} (AI) created {new_company_name} at {selected_cell}."
-                # self.player_has_moved is set by create_new_company if successful
-            else:
-                # create_new_company failed (e.g., cell was an 'O' marker, or other reason from message)
-                # Fallback to placing a diamond
-                # Ensure player_has_moved is set if create_new_company failed before setting it
-                if not self.player_has_moved[current_player]: # Check if create_new_company might have failed early
-                    self.player_has_moved[current_player] = True # Tentatively set, place_diamond might confirm or game_screen will handle
-
-                success, diamond_message = self.place_diamond(selected_cell, current_player)
-                if success:
-                    action_taken_message = f"{current_player} (AI) placed a diamond at {selected_cell}. ({diamond_message})"
-                else:
-                    action_taken_message = f"{current_player} (AI) failed to make a move at {selected_cell} after failing to create company. ({diamond_message})"
-                    # Ensure player_has_moved is robustly set, place_diamond should handle its own success/failure regarding this flag.
-                    # If place_diamond also fails, it should still ensure player_has_moved is true.
-            else:
+                # THE FOLLOWING 'if/else' BLOCK (Condition B) MUST BE NESTED INSIDE THE 'THEN' OF Condition A
+                if new_company_name: # Condition B (Correctly Nested)
+                    action_taken_message = f"{current_player} (AI) created {new_company_name} at {selected_cell}."
+                    # self.player_has_moved is set by create_new_company if successful
+                else: # Else for Condition B (Correctly Nested)
+                    # create_new_company failed (e.g., cell was an 'O' marker, or other reason from message)
+                    # Fallback to placing a diamond
+                    if not self.player_has_moved[current_player]: 
+                        self.player_has_moved[current_player] = True 
+                    success, diamond_message = self.place_diamond(selected_cell, current_player)
+                    if success:
+                        action_taken_message = f"{current_player} (AI) placed a diamond at {selected_cell} after failing to create company. ({diamond_message})"
+                    else:
+                        action_taken_message = f"{current_player} (AI) failed to make a move at {selected_cell} after failing to create company and diamond. ({diamond_message})"
+            else: # Else for Condition A (around line 661). This should now be syntactically valid.
                 # Cannot found a company (no names or no valid adjacency), so place a diamond
-                # Ensure player_has_moved is set if the path leading here didn't set it
                 if not self.player_has_moved[current_player]:
-                     self.player_has_moved[current_player] = True # Tentatively set
-
+                     self.player_has_moved[current_player] = True 
                 success, diamond_message = self.place_diamond(selected_cell, current_player)
                 if success:
                     action_taken_message = f"{current_player} (AI) placed a diamond at {selected_cell}. ({diamond_message})"
