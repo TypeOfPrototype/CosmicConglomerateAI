@@ -666,17 +666,17 @@ class GameState:
         
         # Ensure player_has_moved is True if any action was attempted or if AI decided to pass.
         # The individual calls (create_new_company, place_diamond, expand_company, merge_companies)
-    # are responsible for setting self.player_has_moved[current_player] = True upon successful action.
-    # If ai_take_turn reaches this point and no action successfully set it,
-    # it implies a possible path where an action was attempted but failed in a way that didn't set the flag,
-    # or the AI decided to do nothing (which it currently doesn't).
-    # The robust check for empty available_cells already handles setting this flag if no move is possible at all.
-    # If, after all logic, player_has_moved is STILL false, it's a bug.
-    # However, the above logic tries to ensure it's set if any operation is attempted.
-    # Let's rely on the action methods themselves or the initial "no available cells" check.
-    
-    print(action_taken_message) # Keep for debugging
-    return selected_cell, action_taken_message
+        # are responsible for setting self.player_has_moved[current_player] = True upon successful action.
+        # If ai_take_turn reaches this point and no action successfully set it,
+        # it implies a possible path where an action was attempted but failed in a way that didn't set the flag,
+        # or the AI decided to do nothing (which it currently doesn't).
+        # The robust check for empty available_cells already handles setting this flag if no move is possible at all.
+        # If, after all logic, player_has_moved is STILL false, it's a bug.
+        # However, the above logic tries to ensure it's set if any operation is attempted.
+        # Let's rely on the action methods themselves or the initial "no available cells" check.
+
+        print(action_taken_message) # Keep for debugging
+        return selected_cell, action_taken_message
 
     def _can_found_company_at(self, coords):
         row, col = coords
