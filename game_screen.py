@@ -21,6 +21,7 @@ from kivy.app import App # Added import
 
 from custom_widgets import ImageButton
 from game_logic import GameState
+from highscore_manager import add_highscore
 
 
 class GameScreen(Screen):
@@ -815,7 +816,7 @@ class GameScreen(Screen):
 
     def end_game(self):
         """
-        Calculate final wealth and determine the winner.
+        Calculate final wealth, determine the winner, and save highscores.
         """
         player_wealth_summary = {
             player: self.game_state.player_wealth[player] for player in self.game_state.players
@@ -827,11 +828,27 @@ class GameScreen(Screen):
                     player_wealth_summary[player] += num_shares * company_value
 
         # Find the player with the highest wealth
-        winner = max(player_wealth_summary, key=player_wealth_summary.get)
-        self.info_label.text = (
-            f"Game over! {winner} wins with £{player_wealth_summary[winner]}!"
-        )
-        print(f"Game Over! Winner: {winner} with £{player_wealth_summary[winner]}.")
+        if player_wealth_summary: # Ensure there are scores to process
+            winner = max(player_wealth_summary, key=player_wealth_summary.get)
+            self.info_label.text = (
+                f"Game over! {winner} wins with £{player_wealth_summary[winner]}!"
+            )
+            print(f"Game Over! Winner: {winner} with £{player_wealth_summary[winner]}.")
+
+            # --- Add highscore saving logic ---
+            print("Attempting to save highscores...")
+            for player_name, final_score in player_wealth_summary.items():
+                try:
+                    add_highscore(player_name, final_score)
+                    print(f"Called add_highscore for {player_name} with score {final_score}")
+                except Exception as e:
+                    print(f"Error calling add_highscore for {player_name}: {e}")
+            # --- End of highscore saving logic ---
+
+        else:
+            self.info_label.text = "Game over! No scores to report."
+            print("Game Over! No scores to report.")
+
         self.disable_grid_buttons()
 
     def update_player_info(self):

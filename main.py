@@ -6,6 +6,7 @@ from kivy.core.window import Window
 from kivy.uix.screenmanager import ScreenManager
 from start_screen import StartScreen
 from game_screen import GameScreen
+from highscore_screen import HighscoreScreen
 
 # Set the window size for better visibility
 Window.size = (1200, 800)
@@ -16,6 +17,7 @@ class SpaceMonopolyApp(App):
         sm = ScreenManager()
         sm.add_widget(StartScreen(name='start'))
         sm.add_widget(GameScreen(name='game'))
+        sm.add_widget(HighscoreScreen(name='highscores')) # Add HighscoreScreen
         return sm
 
 # Run the application

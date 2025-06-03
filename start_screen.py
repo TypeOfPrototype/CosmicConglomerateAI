@@ -169,6 +169,27 @@ class StartScreen(Screen):
         )
         layout.add_widget(self.turn_length_input)
 
+        # Highscores Button
+        self.highscores_button = Button(
+            text="Highscores",
+            font_size=32, # Match start button
+            size_hint=(1, 0.2), # Match start button
+            color=(1, 1, 1, 1), # Match start button
+            background_normal='', # Match start button
+            background_color=(0.1, 0.6, 0.9, 1), # Match start button (can be different color if desired)
+            font_name=FONT_PATH # Match start button
+        )
+        self.highscores_button.bind(on_press=self.go_to_highscores)
+        # Add rounded rectangle for highscores button
+        with self.highscores_button.canvas.before:
+            Color(0.1, 0.6, 0.9, 1) # Match start button color
+            self.highscores_button_round = RoundedRectangle(pos=self.highscores_button.pos,
+                                                           size=self.highscores_button.size,
+                                                           radius=[20]) # Match start button radius
+            self.highscores_button.bind(pos=self._update_highscores_button_round,
+                                       size=self._update_highscores_button_round)
+        layout.add_widget(self.highscores_button)
+
         # Start button with rounded corners and custom font
         self.start_button = Button(
             text='Start Game',
@@ -202,6 +223,10 @@ class StartScreen(Screen):
     def _update_button_round(self, instance, value):
         self.start_button_round.pos = instance.pos
         self.start_button_round.size = instance.size
+
+    def _update_highscores_button_round(self, instance, value):
+        self.highscores_button_round.pos = instance.pos
+        self.highscores_button_round.size = instance.size
 
     def _update_marker_percentage_label(self, instance, value):
         self.marker_percentage_value_label.text = f"{int(value)}%"
@@ -284,3 +309,7 @@ class StartScreen(Screen):
         self.manager.get_screen('game').initialize_game(
             player_configurations, (cols, rows), game_turn_length, marker_percentage
         )
+
+    def go_to_highscores(self, instance):
+        """Switches to the highscore screen."""
+        self.manager.current = 'highscores'
