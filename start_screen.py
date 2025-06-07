@@ -116,15 +116,25 @@ class StartScreen(Screen):
             )
 
             # Set initial state of TextInput and Profile Spinner based on Spinner
-            if default_configs[i]["type"] == "Off":
+            player_default_type = default_configs[i]["type"]
+            if player_default_type == "Off":
                 name_input.disabled = True
                 name_input.text = ""
                 profile_spinner.disabled = True
-                profile_spinner.text = "<Create New Profile>" # Reset when off
-            else:
+                profile_spinner.text = "<Create New Profile>"
+            elif player_default_type == "AI (Easy)":
+                profile_spinner.disabled = True
+                profile_spinner.text = "<N/A for AI>"
+                name_input.disabled = True
+                name_input.text = default_configs[i]["name"] # Should be like "AI X (Easy)"
+            else: # Human
                 name_input.disabled = default_configs[i]["profile_text"] != "<Create New Profile>"
                 profile_spinner.disabled = False
-
+                # Ensure name_input text is correct if an existing profile is defaulted
+                if default_configs[i]["profile_text"] != "<Create New Profile>":
+                    name_input.text = default_configs[i]["profile_text"]
+                else:
+                    name_input.text = "" # For new profile, start empty
 
             # Bind spinners change to callbacks
             type_spinner.bind(text=partial(self._on_player_type_change, player_index=i))
@@ -251,22 +261,23 @@ class StartScreen(Screen):
         name_input = config['name_input']
         profile_spinner = config['profile_spinner']
 
-        if text == "Off":
+        if text == "AI (Easy)":
+            profile_spinner.disabled = True
+            profile_spinner.text = "<N/A for AI>" # Placeholder for AI
+            name_input.disabled = True
+            name_input.text = f"AI {player_index + 1} (Easy)" # Default AI name
+        elif text == "Human":
+            profile_spinner.disabled = False
+            # name_input.disabled = False # This will be handled by _on_profile_selection_change
+            # When switching to Human, profile_spinner might be "<Create New Profile>" or an existing profile.
+            # Call _on_profile_selection_change to set name_input state correctly.
+            self._on_profile_selection_change(profile_spinner, profile_spinner.text, player_index)
+        elif text == "Off":
+            profile_spinner.disabled = True
+            profile_spinner.text = "<Create New Profile>" # Reset for when it's re-enabled
             name_input.disabled = True
             name_input.text = ""
-            profile_spinner.disabled = True
-            # Optionally reset profile spinner:
-            # profile_spinner.text = "<Create New Profile>"
-        else:
-            profile_spinner.disabled = False
-            # Trigger profile selection logic to correctly set name_input state
-            self._on_profile_selection_change(profile_spinner, profile_spinner.text, player_index)
-            # If profile is "<Create New Profile>", set default name based on type, otherwise name is set by profile
-            if profile_spinner.text == "<Create New Profile>":
-                if text == "Human" and not name_input.text: # Don't overwrite if user started typing
-                    name_input.hint_text = f"Player {player_index + 1} Name"
-                elif text == "AI (Easy)" and not name_input.text:
-                    name_input.hint_text = f"AI {player_index + 1} Name"
+            name_input.hint_text = "" # Clear hint text
 
 
     def _on_profile_selection_change(self, spinner_instance, selected_profile_name, player_index):
@@ -274,8 +285,8 @@ class StartScreen(Screen):
         name_input = config['name_input']
         player_type_spinner = config['type_spinner']
 
-        if player_type_spinner.text == "Off": # Should not happen if type_spinner disables profile_spinner
-            return
+        if player_type_spinner.text == "Off" or player_type_spinner.text == "AI (Easy)":
+            return # AI profile/name is fixed, "Off" means no input
 
         if selected_profile_name == "<Create New Profile>":
             name_input.disabled = False
@@ -313,45 +324,63 @@ class StartScreen(Screen):
             if player_type == "Off":
                 continue
 
-            profile_spinner = config['profile_spinner']
-            name_input = config['name_input']
+            profile_spinner = config['profile_spinner'] # Human player's profile spinner
+            name_input = config['name_input']           # Human player's name input (for new profiles)
 
             selected_profile_option = profile_spinner.text
             entered_name = name_input.text.strip()
 
-            profile_username = ""
-            is_new_profile = False
+            profile_username_for_game = "" # This will be the actual username string for the profile
+            is_new_profile_flag = False
+            player_display_name = "" # This is what GameState might use as 'name' if it's different from profile_username
 
-            if selected_profile_option == "<Create New Profile>":
-                if not entered_name:
-                    self._show_error_popup(f"Player {i+1}: Name cannot be empty when creating a new profile.")
-                    return
-                if entered_name == "<Create New Profile>": # Reserved name
-                    self._show_error_popup(f"Player {i+1}: Invalid name '{entered_name}'. Please choose a different name.")
-                    return
-                if self.profile_manager.get_profile(entered_name):
-                    self._show_error_popup(f"Player {i+1}: Profile '{entered_name}' already exists. Select it from the list or choose a different name.")
-                    return
-                if entered_name in active_player_names:
-                    self._show_error_popup(f"Player {i+1}: Name '{entered_name}' is already taken by another active player in this game.")
-                    return
+            if player_type == "Human":
+                if selected_profile_option == "<Create New Profile>":
+                    if not entered_name:
+                        self._show_error_popup(f"Player {i+1} (Human): Name cannot be empty when creating a new profile.")
+                        return
+                    if entered_name == "<Create New Profile>" or entered_name == "<N/A for AI>": # Reserved names
+                        self._show_error_popup(f"Player {i+1} (Human): Invalid name '{entered_name}'. Please choose a different name.")
+                        return
+                    if self.profile_manager.get_profile(entered_name):
+                        self._show_error_popup(f"Player {i+1} (Human): Profile '{entered_name}' already exists. Select it from the list or choose a different name.")
+                        return
+                    if entered_name in active_player_names: # Check against other human player names being configured
+                        self._show_error_popup(f"Player {i+1} (Human): Name '{entered_name}' is already taken by another active Human player.")
+                        return
+
+                    profile_username_for_game = entered_name
+                    player_display_name = entered_name
+                    is_new_profile_flag = True
+                    active_player_names.add(entered_name)
+                else: # Existing profile selected for Human
+                    profile_username_for_game = selected_profile_option
+                    player_display_name = selected_profile_option
+                    is_new_profile_flag = False
+                    if profile_username_for_game in active_player_names: # Check against other human player names
+                        self._show_error_popup(f"Player {i+1} (Human): Profile '{profile_username_for_game}' is already selected by another active Human player.")
+                        return
+                    active_player_names.add(profile_username_for_game)
                 
-                profile_username = entered_name
-                is_new_profile = True
-            else:
-                # Existing profile selected
-                profile_username = selected_profile_option
-                if profile_username in active_player_names:
-                    self._show_error_popup(f"Player {i+1}: Profile '{profile_username}' is already selected by another player.")
-                    return
+                player_configurations.append({
+                    'name': player_display_name,
+                    'type': player_type,
+                    'profile_username': profile_username_for_game, # Actual profile ID for humans
+                    'is_new_profile': is_new_profile_flag
+                })
 
-            active_player_names.add(profile_username)
-            player_configurations.append({
-                'name': profile_username, # 'name' key is used by game logic, should be the profile username
-                'type': player_type,
-                'profile_username': profile_username,
-                'is_new_profile': is_new_profile
-            })
+            elif player_type == "AI (Easy)":
+                ai_player_name = name_input.text.strip() # Should be "AI X (Easy)"
+                # AI players do not have user profiles in the same way.
+                # profile_username can be None or a generic ID.
+                # 'name' will be the AI's display name.
+                player_configurations.append({
+                    'name': ai_player_name,
+                    'type': player_type,
+                    'profile_username': None, # No specific user profile for AI
+                    'is_new_profile': False
+                })
+            # "Off" players are skipped earlier
 
         if len(player_configurations) < 1:
             self._show_error_popup('At least one player (Human or AI) must be active.')

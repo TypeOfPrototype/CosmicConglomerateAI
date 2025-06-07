@@ -44,45 +44,46 @@ class GameScreen(Screen):
 
         # Initialize ProfileManager and player profile objects
         self.profile_manager = ProfileManager()
-        self.player_profile_objects = {} # Store UserProfile objects, keyed by profile_username
+        # player_profile_objects will be keyed by player_game_name (display name)
+        self.player_profile_objects = {}
 
-        # Process player_configurations to load/create profiles
-        # GameState will be initialized with player_configurations that include profile_username.
-        # The 'name' key in player_configurations from StartScreen should already be the profile_username.
         for p_config in player_configurations:
-            profile_username = p_config['profile_username']
-            is_new = p_config.get('is_new_profile', False)
+            profile_username = p_config['profile_username'] # This can be None for AI
+            player_game_name = p_config['name'] # This is the display name, e.g., "HumanPlayer1" or "AI 1 (Easy)"
 
-            profile = None
-            if is_new:
-                try:
-                    profile = self.profile_manager.create_profile(profile_username)
-                    print(f"GameScreen: Created new profile for {profile_username}")
-                except ValueError as e:
-                    print(f"GameScreen Error: Failed to create new profile '{profile_username}': {e}. Using existing or fallback.")
-                    profile = self.profile_manager.get_profile(profile_username)
-                    if not profile:
-                        profile = UserProfile(profile_username) # Temp profile for the session
-            else: # Existing profile
-                profile = self.profile_manager.get_profile(profile_username)
-                if not profile:
-                    print(f"GameScreen Error: Existing profile '{profile_username}' not found. Creating fallback profile.")
+            if profile_username is not None: # Human player
+                is_new = p_config.get('is_new_profile', False)
+                profile = None
+                if is_new:
                     try:
                         profile = self.profile_manager.create_profile(profile_username)
-                    except ValueError:
+                        print(f"GameScreen: Created new profile for {profile_username}")
+                    except ValueError as e:
+                        print(f"GameScreen Error creating new profile '{profile_username}': {e}. Trying to get existing.")
                         profile = self.profile_manager.get_profile(profile_username)
-                        if not profile:
-                             profile = UserProfile(profile_username)
+                        if not profile: # Fallback to temp UserProfile
+                            profile = UserProfile(profile_username)
+                else: # Existing human profile
+                    profile = self.profile_manager.get_profile(profile_username)
+                    if not profile:
+                        print(f"GameScreen Error: Existing profile '{profile_username}' not found. Creating fallback.")
+                        try: # Attempt to create it if it was supposed to exist but doesn't
+                            profile = self.profile_manager.create_profile(profile_username)
+                        except ValueError: # If it somehow exists after all (e.g. race condition)
+                            profile = self.profile_manager.get_profile(profile_username)
+                            if not profile: # Absolute fallback
+                                profile = UserProfile(profile_username)
 
-            if profile:
-                self.player_profile_objects[profile_username] = profile
-            else:
-                print(f"GameScreen FATAL: Could not load or create profile for {profile_username}. Using temp UserProfile.")
-                self.player_profile_objects[profile_username] = UserProfile(profile_username)
+                # Store the UserProfile object (or a temporary one) against the player's game name
+                self.player_profile_objects[player_game_name] = profile if profile else UserProfile(profile_username) # Ensure a profile object is stored
+
+            else: # AI Player (profile_username is None)
+                self.player_profile_objects[player_game_name] = None # Explicitly store None for AI players
+                print(f"GameScreen: Setting up AI player {player_game_name} with no profile object.")
 
         # Initialize GameState
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        # Pass player_configurations. GameState __init__ should use 'profile_username'.
+        # GameState __init__ will now use 'name' for its primary player list.
         self.game_state = GameState(player_configurations, grid_size, script_dir)
         self.game_turn_length = game_turn_length  # Game turn length set by player
 
@@ -857,44 +858,43 @@ class GameScreen(Screen):
         Calculate final wealth and determine the winner.
         """
         player_wealth_summary = {
-            player: self.game_state.player_wealth[player] for player in self.game_state.players
+            player_name: self.game_state.player_wealth[player_name] for player_name in self.game_state.players
         }
-        for player, shares in self.game_state.player_shares.items():
+        for player_name, shares in self.game_state.player_shares.items():
             for company, num_shares in shares.items():
                 if company in self.game_state.company_info: # Check if company still exists
                     company_value = self.game_state.company_info[company]["value"]
-                    player_wealth_summary[player] += num_shares * company_value
+                    player_wealth_summary[player_name] += num_shares * company_value
 
-        winner = None
-        if player_wealth_summary: # Ensure there are players to determine a winner
-            winner = max(player_wealth_summary, key=player_wealth_summary.get)
+        winner_name = None # This will be the display name of the winner
+        if player_wealth_summary:
+            winner_name = max(player_wealth_summary, key=player_wealth_summary.get)
 
         end_game_messages = []
-        if winner:
-            end_game_messages.append(f"Game over! {winner} wins with £{player_wealth_summary[winner]}!")
-            print(f"Game Over! Winner: {winner} with £{player_wealth_summary[winner]}.")
+        if winner_name:
+            end_game_messages.append(f"Game over! {winner_name} wins with £{player_wealth_summary[winner_name]}!")
+            print(f"Game Over! Winner: {winner_name} with £{player_wealth_summary[winner_name]}.")
 
             # Update profiles
-            # Iterate using GameState's player list (which should be profile_usernames)
-            for profile_username_key in self.game_state.players:
-                user_profile = self.player_profile_objects.get(profile_username_key)
-                # Score is total wealth for that player
-                score = player_wealth_summary.get(profile_username_key, 0)
-                is_win = (profile_username_key == winner)
+            for player_game_name in self.game_state.players: # player_game_name is the display name
+                user_profile = self.player_profile_objects.get(player_game_name) # Get profile using display name
 
-                if user_profile:
+                if user_profile is not None: # This is a Human player with a profile
+                    score = player_wealth_summary.get(player_game_name, 0)
+                    is_win = (player_game_name == winner_name) # Compare display names
+
                     old_high_score = user_profile.high_score
-                    user_profile.update_stats(score, is_win) # score is total wealth here
+                    user_profile.update_stats(score, is_win)
                     try:
-                        self.profile_manager.save_profile(user_profile.username)
+                        self.profile_manager.save_profile(user_profile.username) # Save using actual profile username
                         print(f"Saved profile for {user_profile.username}. Games: {user_profile.games_played}, Wins: {user_profile.total_wins}, HS: {user_profile.high_score}")
                         if user_profile.high_score > old_high_score and score == user_profile.high_score :
                              end_game_messages.append(f" {user_profile.username} got a new High Score: {user_profile.high_score}!")
                     except Exception as e:
                         print(f"Error saving profile for {user_profile.username}: {e}")
-                else:
-                    print(f"Error: UserProfile object not found for {profile_username_key} during end_game.")
-        else:
+                # else: AI player, no profile to update or save.
+
+        else: # No winner_name
             end_game_messages.append("Game over! No winner could be determined.")
             print("Game Over! No winner could be determined (e.g. no players or wealth summary empty).")
 
@@ -905,17 +905,18 @@ class GameScreen(Screen):
         """
         Update the sidebar with the current player's information.
         """
-        current_player_profile_name = self.game_state.players[self.game_state.current_player_index]
-        current_profile = self.player_profile_objects.get(current_player_profile_name)
+        current_player_name = self.game_state.players[self.game_state.current_player_index] # This is the display name
+        current_player_type = self.game_state.get_player_type(current_player_name)
+        user_profile = self.player_profile_objects.get(current_player_name) # This can be None for AI
 
-        cash = self.game_state.player_wealth[current_player_profile_name]
+        cash = self.game_state.player_wealth[current_player_name]
         holdings_value = 0
 
         self.holdings_display_container.clear_widgets() # Clear previous holdings
 
-        # Populate new holdings display
-        for company, num_shares in self.game_state.player_shares[current_player_profile_name].items():
-            if company in self.game_state.company_info: # Should always be true if data is consistent
+        # Populate new holdings display (this logic is common for Human and AI)
+        for company, num_shares in self.game_state.player_shares[current_player_name].items():
+            if company in self.game_state.company_info:
                 share_value = self.game_state.company_info[company]['value']
                 total_share_value = share_value * num_shares
                 holdings_value += total_share_value
@@ -945,14 +946,16 @@ class GameScreen(Screen):
 
         total_wealth = cash + holdings_value
 
-        if current_profile:
-            self.current_player_label.text = f"[b]Current Player:[/b] {current_profile.username} (HS: {current_profile.high_score})"
-        else: # Fallback if profile object somehow missing
-            self.current_player_label.text = f"[b]Current Player:[/b] {current_player_profile_name}"
+        if current_player_type == "AI (Easy)" or user_profile is None:
+            self.current_player_label.text = f"[b]Current Player:[/b] {current_player_name} (AI)"
+            # Optionally, hide or change text for profile-specific parts of the sidebar not covered
+            # For example, if there was a dedicated "High Score" label, it would be set to "N/A" here.
+            # The current_player_label now incorporates this.
+        else: # Human player
+            self.current_player_label.text = f"[b]Current Player:[/b] {user_profile.username} (HS: {user_profile.high_score})"
 
         self.player_money_label.text = f"Cash: £{cash}"
         self.total_wealth_label.text = f"Total Wealth: £{total_wealth}"
-        # The old self.player_holdings_label is no longer used for this combined text.
 
     def open_settings_popup(self, instance):
         """

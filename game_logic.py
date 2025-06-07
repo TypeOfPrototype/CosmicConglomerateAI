@@ -6,15 +6,20 @@ from collections import deque
 
 class GameState:
     def __init__(self, player_configurations, grid_size, script_dir): # Changed players to player_configurations
-        # Player configurations now include 'profile_username'.
-        # self.players stores profile_username, the unique identifier.
-        # 'name' from p_config is assumed to be the profile_username passed from StartScreen/GameScreen.
-        self.players = [p['profile_username'] for p in player_configurations]
-        self.player_types = {p['profile_username']: p['type'] for p in player_configurations}
+        # Player configurations contain 'name' (display name), 'type', 'profile_username', 'is_new_profile'.
+        # self.players will store display names (e.g., 'User1', 'AI 1 (Easy)').
+        self.players = [p['name'] for p in player_configurations]
+        # self.player_types is keyed by display name.
+        self.player_types = {p['name']: p['type'] for p in player_configurations}
 
-        # Store additional profile details if needed by game logic directly
+        # Store profile_username and other details, keyed by display name.
+        # profile_username can be None for AI players.
         self.player_profile_details = {
-            p['profile_username']: {'type': p['type'], 'is_new': p.get('is_new_profile', False)}
+            p['name']: {
+                'profile_username': p['profile_username'],
+                'type': p['type'],
+                'is_new': p.get('is_new_profile', False)
+            }
             for p in player_configurations
         }
 
@@ -44,13 +49,13 @@ class GameState:
         # Game data
         self.company_map = {}  # Maps coordinates to company info
         self.company_info = {}  # Maps company names to their details
-        # Initialize player_wealth, player_shares, and player_has_moved using profile_username from self.players
-        self.player_wealth = {profile_username: 6000 for profile_username in self.players}
-        self.player_shares = {profile_username: {} for profile_username in self.players}
+        # Initialize player_wealth, player_shares, and player_has_moved using display names from self.players
+        self.player_wealth = {name: 6000 for name in self.players}
+        self.player_shares = {name: {} for name in self.players}
         self.diamond_positions = set()  # Set of coordinates with diamonds
 
         # Track if players have made a move during their turn
-        self.player_has_moved = {profile_username: False for profile_username in self.players}  # New flag
+        self.player_has_moved = {name: False for name in self.players}  # New flag
 
         # Callbacks for UI updates
         self.callbacks = []
