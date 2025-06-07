@@ -6,8 +6,18 @@ from collections import deque
 
 class GameState:
     def __init__(self, player_configurations, grid_size, script_dir): # Changed players to player_configurations
-        self.players = [p['name'] for p in player_configurations] # Extract player names
-        self.player_types = {p['name']: p['type'] for p in player_configurations} # Store player types
+        # Player configurations now include 'profile_username'.
+        # self.players stores profile_username, the unique identifier.
+        # 'name' from p_config is assumed to be the profile_username passed from StartScreen/GameScreen.
+        self.players = [p['profile_username'] for p in player_configurations]
+        self.player_types = {p['profile_username']: p['type'] for p in player_configurations}
+
+        # Store additional profile details if needed by game logic directly
+        self.player_profile_details = {
+            p['profile_username']: {'type': p['type'], 'is_new': p.get('is_new_profile', False)}
+            for p in player_configurations
+        }
+
         self.grid_size = grid_size  # (rows, cols)
         self.current_player_index = 0
         self.company_count = 0
@@ -34,12 +44,13 @@ class GameState:
         # Game data
         self.company_map = {}  # Maps coordinates to company info
         self.company_info = {}  # Maps company names to their details
-        self.player_wealth = {player: 6000 for player in self.players}
-        self.player_shares = {player: {} for player in self.players}
+        # Initialize player_wealth, player_shares, and player_has_moved using profile_username from self.players
+        self.player_wealth = {profile_username: 6000 for profile_username in self.players}
+        self.player_shares = {profile_username: {} for profile_username in self.players}
         self.diamond_positions = set()  # Set of coordinates with diamonds
 
         # Track if players have made a move during their turn
-        self.player_has_moved = {player: False for player in self.players}  # New flag
+        self.player_has_moved = {profile_username: False for profile_username in self.players}  # New flag
 
         # Callbacks for UI updates
         self.callbacks = []
@@ -339,7 +350,8 @@ class GameState:
                 size += 1
                 company_positions.append(c_coords)
         
-        extra_value = 0
+        o_marker_bonus = 0 # Initialize to 0
+        is_adjacent_to_any_o_marker = False
         for company_coord in company_positions:
             r, c = company_coord
             potential_adjacent_o_markers = [
@@ -348,16 +360,21 @@ class GameState:
             ]
             for adj_coord in potential_adjacent_o_markers:
                 if adj_coord in self.initial_o_marker_locations:
-                    extra_value += 200  # Accumulate bonus for each adjacency
+                    is_adjacent_to_any_o_marker = True
+                    break # Found an adjacency, no need to check further for this company_coord
+            if is_adjacent_to_any_o_marker:
+                break # Found an adjacency for the company, no need to check other company_coords
+
+        if is_adjacent_to_any_o_marker:
+            o_marker_bonus = 200 # Flat bonus
         
         base_value = size * 100
-        total_value = base_value + extra_value
+        total_value = base_value + o_marker_bonus # Use the flat bonus
 
         self.company_info[company_name]['size'] = size
         self.company_info[company_name]['value'] = total_value
         
-        # The log message for `o_marker_bonus` should correctly reflect this accumulated `extra_value`.
-        print(f"Updated company '{company_name}': size={size}, base_value={base_value}, o_marker_bonus={extra_value}, total_value={total_value}.")
+        print(f"Updated company '{company_name}': size={size}, base_value={base_value}, o_marker_bonus={o_marker_bonus}, total_value={total_value}.")
 
         # Update the value in company_map entries
         for c_coords in company_positions:

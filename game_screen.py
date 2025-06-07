@@ -21,6 +21,7 @@ from kivy.app import App # Added import
 
 from custom_widgets import ImageButton
 from game_logic import GameState
+from profile_manager import ProfileManager, UserProfile
 
 
 class GameScreen(Screen):
@@ -41,9 +42,47 @@ class GameScreen(Screen):
     def initialize_game(self, player_configurations, grid_size, game_turn_length, marker_percentage=0.1): # player_names -> player_configurations
         self.main_layout.clear_widgets()
 
+        # Initialize ProfileManager and player profile objects
+        self.profile_manager = ProfileManager()
+        self.player_profile_objects = {} # Store UserProfile objects, keyed by profile_username
+
+        # Process player_configurations to load/create profiles
+        # GameState will be initialized with player_configurations that include profile_username.
+        # The 'name' key in player_configurations from StartScreen should already be the profile_username.
+        for p_config in player_configurations:
+            profile_username = p_config['profile_username']
+            is_new = p_config.get('is_new_profile', False)
+
+            profile = None
+            if is_new:
+                try:
+                    profile = self.profile_manager.create_profile(profile_username)
+                    print(f"GameScreen: Created new profile for {profile_username}")
+                except ValueError as e:
+                    print(f"GameScreen Error: Failed to create new profile '{profile_username}': {e}. Using existing or fallback.")
+                    profile = self.profile_manager.get_profile(profile_username)
+                    if not profile:
+                        profile = UserProfile(profile_username) # Temp profile for the session
+            else: # Existing profile
+                profile = self.profile_manager.get_profile(profile_username)
+                if not profile:
+                    print(f"GameScreen Error: Existing profile '{profile_username}' not found. Creating fallback profile.")
+                    try:
+                        profile = self.profile_manager.create_profile(profile_username)
+                    except ValueError:
+                        profile = self.profile_manager.get_profile(profile_username)
+                        if not profile:
+                             profile = UserProfile(profile_username)
+
+            if profile:
+                self.player_profile_objects[profile_username] = profile
+            else:
+                print(f"GameScreen FATAL: Could not load or create profile for {profile_username}. Using temp UserProfile.")
+                self.player_profile_objects[profile_username] = UserProfile(profile_username)
+
         # Initialize GameState
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        # Pass player_configurations directly to GameState
+        # Pass player_configurations. GameState __init__ should use 'profile_username'.
         self.game_state = GameState(player_configurations, grid_size, script_dir)
         self.game_turn_length = game_turn_length  # Game turn length set by player
 
@@ -822,30 +861,60 @@ class GameScreen(Screen):
         }
         for player, shares in self.game_state.player_shares.items():
             for company, num_shares in shares.items():
-                if company in self.game_state.company_info:
+                if company in self.game_state.company_info: # Check if company still exists
                     company_value = self.game_state.company_info[company]["value"]
                     player_wealth_summary[player] += num_shares * company_value
 
-        # Find the player with the highest wealth
-        winner = max(player_wealth_summary, key=player_wealth_summary.get)
-        self.info_label.text = (
-            f"Game over! {winner} wins with £{player_wealth_summary[winner]}!"
-        )
-        print(f"Game Over! Winner: {winner} with £{player_wealth_summary[winner]}.")
+        winner = None
+        if player_wealth_summary: # Ensure there are players to determine a winner
+            winner = max(player_wealth_summary, key=player_wealth_summary.get)
+
+        end_game_messages = []
+        if winner:
+            end_game_messages.append(f"Game over! {winner} wins with £{player_wealth_summary[winner]}!")
+            print(f"Game Over! Winner: {winner} with £{player_wealth_summary[winner]}.")
+
+            # Update profiles
+            # Iterate using GameState's player list (which should be profile_usernames)
+            for profile_username_key in self.game_state.players:
+                user_profile = self.player_profile_objects.get(profile_username_key)
+                # Score is total wealth for that player
+                score = player_wealth_summary.get(profile_username_key, 0)
+                is_win = (profile_username_key == winner)
+
+                if user_profile:
+                    old_high_score = user_profile.high_score
+                    user_profile.update_stats(score, is_win) # score is total wealth here
+                    try:
+                        self.profile_manager.save_profile(user_profile.username)
+                        print(f"Saved profile for {user_profile.username}. Games: {user_profile.games_played}, Wins: {user_profile.total_wins}, HS: {user_profile.high_score}")
+                        if user_profile.high_score > old_high_score and score == user_profile.high_score :
+                             end_game_messages.append(f" {user_profile.username} got a new High Score: {user_profile.high_score}!")
+                    except Exception as e:
+                        print(f"Error saving profile for {user_profile.username}: {e}")
+                else:
+                    print(f"Error: UserProfile object not found for {profile_username_key} during end_game.")
+        else:
+            end_game_messages.append("Game over! No winner could be determined.")
+            print("Game Over! No winner could be determined (e.g. no players or wealth summary empty).")
+
+        self.info_label.text = " ".join(end_game_messages)
         self.disable_grid_buttons()
 
     def update_player_info(self):
         """
         Update the sidebar with the current player's information.
         """
-        current_player = self.game_state.players[self.game_state.current_player_index]
-        cash = self.game_state.player_wealth[current_player]
+        current_player_profile_name = self.game_state.players[self.game_state.current_player_index]
+        current_profile = self.player_profile_objects.get(current_player_profile_name)
+
+        cash = self.game_state.player_wealth[current_player_profile_name]
         holdings_value = 0
 
         self.holdings_display_container.clear_widgets() # Clear previous holdings
 
         # Populate new holdings display
-        for company, num_shares in self.game_state.player_shares[current_player].items():
+        for company, num_shares in self.game_state.player_shares[current_player_profile_name].items():
             if company in self.game_state.company_info: # Should always be true if data is consistent
                 share_value = self.game_state.company_info[company]['value']
                 total_share_value = share_value * num_shares
@@ -876,7 +945,11 @@ class GameScreen(Screen):
 
         total_wealth = cash + holdings_value
 
-        self.current_player_label.text = f"[b]Current Player:[/b] {current_player}"
+        if current_profile:
+            self.current_player_label.text = f"[b]Current Player:[/b] {current_profile.username} (HS: {current_profile.high_score})"
+        else: # Fallback if profile object somehow missing
+            self.current_player_label.text = f"[b]Current Player:[/b] {current_player_profile_name}"
+
         self.player_money_label.text = f"Cash: £{cash}"
         self.total_wealth_label.text = f"Total Wealth: £{total_wealth}"
         # The old self.player_holdings_label is no longer used for this combined text.

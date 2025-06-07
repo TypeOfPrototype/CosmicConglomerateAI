@@ -11,9 +11,12 @@ class TestGameLogicOMarkerBonus(unittest.TestCase):
 
     def setUp(self):
         self.mock_script_dir = os.path.dirname(__file__) 
-        self.players = ["Player1", "Player2"]
+        self.player_configurations = [
+            {'profile_username': 'Player1', 'type': 'Human', 'is_new_profile': False},
+            {'profile_username': 'Player2', 'type': 'Human', 'is_new_profile': False}
+        ]
         self.grid_size = (10, 10)
-        self.game_state = GameState(self.players, self.grid_size, self.mock_script_dir)
+        self.game_state = GameState(self.player_configurations, self.grid_size, self.mock_script_dir)
         self.game_state.register_callback(MagicMock()) # Mock callbacks
 
     def test_update_company_value_no_o_markers(self):
@@ -26,7 +29,7 @@ class TestGameLogicOMarkerBonus(unittest.TestCase):
         
         coords = [(0,0), (0,1)] # Company of size 2
         for coord in coords:
-            self.game_state.company_map[coord] = {"company_name": company_name, "owner": "Player1", "value": 0}
+            self.game_state.company_map[coord] = {"company_name": company_name, "owner": self.game_state.players[0], "value": 0}
         
         self.game_state.update_company_value(company_name)
         self.assertEqual(self.game_state.company_info[company_name]['value'], 2 * 100) # 200
@@ -44,7 +47,7 @@ class TestGameLogicOMarkerBonus(unittest.TestCase):
         self.game_state.initial_o_marker_locations = {o_marker_loc}
         
         for coord in company_coords:
-            self.game_state.company_map[coord] = {"company_name": company_name, "owner": "Player1", "value": 0}
+            self.game_state.company_map[coord] = {"company_name": company_name, "owner": self.game_state.players[0], "value": 0}
         
         self.game_state.update_company_value(company_name)
         
@@ -64,7 +67,7 @@ class TestGameLogicOMarkerBonus(unittest.TestCase):
         self.game_state.initial_o_marker_locations = o_marker_locs
 
         for coord in company_coords:
-            self.game_state.company_map[coord] = {"company_name": company_name, "owner": "Player1", "value": 0}
+            self.game_state.company_map[coord] = {"company_name": company_name, "owner": self.game_state.players[0], "value": 0}
 
         self.game_state.update_company_value(company_name)
         
@@ -83,7 +86,7 @@ class TestGameLogicOMarkerBonus(unittest.TestCase):
         self.game_state.initial_o_marker_locations = o_markers_for_merged
         
         for coord in merged_coords:
-            self.game_state.company_map[coord] = {"company_name": merged_company_name, "owner": "Player1", "value": 0}
+            self.game_state.company_map[coord] = {"company_name": merged_company_name, "owner": self.game_state.players[0], "value": 0}
         
         self.game_state.update_company_value(merged_company_name) 
         
@@ -101,8 +104,9 @@ class TestGameLogicOMarkerBonus(unittest.TestCase):
         # GameState.all_company_names = ["Nerdniss", "Beetleguice", ...]
         # create_new_company pops from available_company_names. Default setup makes "Nerdniss" first.
         expected_company_name = self.game_state.all_company_names[0] 
+        current_player_profile_name = self.game_state.players[0]
         
-        actual_company_name, _ = self.game_state.create_new_company(company_creation_coord, "Player1")
+        actual_company_name, _ = self.game_state.create_new_company(company_creation_coord, current_player_profile_name)
 
         self.assertIsNotNone(actual_company_name, "Company should be created.")
         self.assertEqual(actual_company_name, expected_company_name) 
@@ -116,22 +120,25 @@ class TestGameLogicMergers(unittest.TestCase):
 
     def setUp(self):
         self.mock_script_dir = os.path.dirname(__file__)
-        self.players = ["Player1"]
+        self.player_configurations = [
+            {'profile_username': 'Player1', 'type': 'Human', 'is_new_profile': False}
+        ]
         self.grid_size = (10, 10)
-        self.game_state = GameState(self.players, self.grid_size, self.mock_script_dir)
+        self.game_state = GameState(self.player_configurations, self.grid_size, self.mock_script_dir)
         self.game_state.notify_callbacks = MagicMock()  # Mock notify_callbacks
 
     def test_merge_companies_share_transfer(self):
         # Setup companies
+        current_player_profile_name = self.game_state.players[0]
         self.game_state.company_info['BigCorp'] = {'size': 2, 'value': 200}
         self.game_state.company_info['SmallCorp'] = {'size': 1, 'value': 100}
 
-        self.game_state.company_map[(0,0)] = {"company_name": "BigCorp", "owner": "Player1", "value": 200}
-        self.game_state.company_map[(0,1)] = {"company_name": "BigCorp", "owner": "Player1", "value": 200}
-        self.game_state.company_map[(0,3)] = {"company_name": "SmallCorp", "owner": "Player1", "value": 100}
+        self.game_state.company_map[(0,0)] = {"company_name": "BigCorp", "owner": current_player_profile_name, "value": 200}
+        self.game_state.company_map[(0,1)] = {"company_name": "BigCorp", "owner": current_player_profile_name, "value": 200}
+        self.game_state.company_map[(0,3)] = {"company_name": "SmallCorp", "owner": current_player_profile_name, "value": 100}
 
         # Setup player shares
-        self.game_state.player_shares['Player1'] = {
+        self.game_state.player_shares[current_player_profile_name] = {
             'BigCorp': 20,
             'SmallCorp': 10
         }
@@ -146,11 +153,12 @@ class TestGameLogicMergers(unittest.TestCase):
 
         # Action: Trigger merger
         companies_involved = {'BigCorp', 'SmallCorp'}
-        self.game_state.merge_companies(coords=(0,2), companies=companies_involved, current_player="Player1")
+        current_player_profile_name = self.game_state.players[0]
+        self.game_state.merge_companies(coords=(0,2), companies=companies_involved, current_player=current_player_profile_name)
 
         # Assertions
-        self.assertEqual(self.game_state.player_shares['Player1'].get('BigCorp', 0), 30)
-        self.assertNotIn('SmallCorp', self.game_state.player_shares['Player1'])
+        self.assertEqual(self.game_state.player_shares[current_player_profile_name].get('BigCorp', 0), 30)
+        self.assertNotIn('SmallCorp', self.game_state.player_shares[current_player_profile_name])
         self.assertNotIn('SmallCorp', self.game_state.company_info)
         self.assertEqual(self.game_state.company_info['BigCorp']['size'], 3) # 2 (BigCorp) + 1 (SmallCorp from map) + 1 (merging tile (0,2))
                                                                           # The merge_companies logic adds the merging tile to the acquirer.
@@ -173,10 +181,11 @@ class TestGameLogicMergers(unittest.TestCase):
         """
         # 1. Initial GameState (done by setUp)
         # 2. Consume all available company names
+        current_player_profile_name = self.game_state.players[0]
         company_names_in_use = []
         for i in range(len(self.game_state.all_company_names)):
             coord = (0, i) # Dummy coordinates for placeholder companies
-            company_name, msg = self.game_state.create_new_company(coord, self.players[0])
+            company_name, msg = self.game_state.create_new_company(coord, current_player_profile_name)
             self.assertIsNotNone(company_name, f"Failed to create placeholder company {i+1}: {msg}")
             company_names_in_use.append(company_name)
         
@@ -198,15 +207,16 @@ class TestGameLogicMergers(unittest.TestCase):
         company_a_coords = [(2,2), (2,3)]
         company_b_coords = [(2,5), (2,6)]
 
+        current_player_profile_name = self.game_state.players[0]
         self.game_state.company_info[company_a_name] = {'size': 0, 'value': 0} # Reset before update
         self.game_state.company_info[company_b_name] = {'size': 0, 'value': 0} # Reset before update
 
         for coord in company_a_coords:
-            self.game_state.company_map[coord] = {"company_name": company_a_name, "owner": self.players[0], "value": 0}
+            self.game_state.company_map[coord] = {"company_name": company_a_name, "owner": current_player_profile_name, "value": 0}
         self.game_state.update_company_value(company_a_name) # Updates size to 2, value to 200
 
         for coord in company_b_coords:
-            self.game_state.company_map[coord] = {"company_name": company_b_name, "owner": self.players[0], "value": 0}
+            self.game_state.company_map[coord] = {"company_name": company_b_name, "owner": current_player_profile_name, "value": 0}
         self.game_state.update_company_value(company_b_name) # Updates size to 2, value to 200
         
         # Ensure other placeholder companies (3, 4, 5) don't interfere with merge tile adjacencies
@@ -267,18 +277,22 @@ class TestGameLogicMergers(unittest.TestCase):
 class TestDiamondPlacement(unittest.TestCase):
     def setUp(self):
         self.mock_script_dir = os.path.dirname(__file__)
-        self.players = ["Player1", "Player2"]
+        self.player_configurations = [
+            {'profile_username': 'Player1', 'type': 'Human', 'is_new_profile': False},
+            {'profile_username': 'Player2', 'type': 'Human', 'is_new_profile': False}
+        ]
         self.grid_size = (10, 10)
-        self.game_state = GameState(self.players, self.grid_size, self.mock_script_dir)
+        self.game_state = GameState(self.player_configurations, self.grid_size, self.mock_script_dir)
         self.game_state.notify_callbacks = MagicMock() # Mock notify_callbacks
 
         # Consume all available company names
+        current_player_profile_name = self.game_state.players[0]
         for i in range(len(self.game_state.all_company_names)):
             # Use distinct coordinates for each company to avoid placement errors
             # Ensure these coordinates are not problematic (e.g., 'O' markers if any were predefined)
             # For this test, assuming (i, 0) are valid, non-'O' marker locations.
             coord = (i, 0) 
-            company_name, msg = self.game_state.create_new_company(coord, self.players[0])
+            company_name, msg = self.game_state.create_new_company(coord, current_player_profile_name)
             if company_name is None:
                 # This should not happen in a clean setup if logic is correct
                 # and all_company_names has 5 unique names.
@@ -305,11 +319,11 @@ class TestDiamondPlacement(unittest.TestCase):
         new_diamond_coord = (5, 6)
         
         # Ensure current player's has_moved flag is False before the action
-        current_player = self.game_state.players[self.game_state.current_player_index]
-        self.game_state.player_has_moved[current_player] = False
+        current_player_profile_name = self.game_state.players[self.game_state.current_player_index]
+        self.game_state.player_has_moved[current_player_profile_name] = False
         
         # Action: Place the new diamond
-        success, message = self.game_state.place_diamond(new_diamond_coord)
+        success, message = self.game_state.place_diamond(new_diamond_coord, current_player_profile_name)
         
         # Assertions
         self.assertTrue(success, "place_diamond should return True for successful placement.")
@@ -325,7 +339,7 @@ class TestDiamondPlacement(unittest.TestCase):
         self.assertNotIn(initial_diamond_coord, self.game_state.company_map, "No company should be mapped to the initial diamond's location.")
         self.assertNotIn(new_diamond_coord, self.game_state.company_map, "No company should be mapped to the new diamond's location.")
         
-        self.assertTrue(self.game_state.player_has_moved[current_player], "Player's has_moved flag should be True.")
+        self.assertTrue(self.game_state.player_has_moved[current_player_profile_name], "Player's has_moved flag should be True.")
 
     def test_place_standalone_diamond_no_available_company_names(self):
         """
@@ -337,10 +351,10 @@ class TestDiamondPlacement(unittest.TestCase):
         
         diamond_coord = (3, 3)
         
-        current_player = self.game_state.players[self.game_state.current_player_index]
-        self.game_state.player_has_moved[current_player] = False
+        current_player_profile_name = self.game_state.players[self.game_state.current_player_index]
+        self.game_state.player_has_moved[current_player_profile_name] = False
         
-        success, message = self.game_state.place_diamond(diamond_coord)
+        success, message = self.game_state.place_diamond(diamond_coord, current_player_profile_name)
         
         self.assertTrue(success)
         self.assertEqual(message, f"Diamond placed at {diamond_coord}.")
@@ -348,7 +362,7 @@ class TestDiamondPlacement(unittest.TestCase):
         self.assertEqual(len(self.game_state.available_company_names), 0)
         self.assertEqual(self.game_state.active_companies, initial_active_companies)
         self.assertNotIn(diamond_coord, self.game_state.company_map)
-        self.assertTrue(self.game_state.player_has_moved[current_player])
+        self.assertTrue(self.game_state.player_has_moved[current_player_profile_name])
 
     def test_place_diamond_forms_company_if_names_available(self):
         """
@@ -357,7 +371,8 @@ class TestDiamondPlacement(unittest.TestCase):
         """
         # Reset available_company_names for this test by creating a new GameState instance
         # or manually managing the list. For simplicity, let's re-initialize part of the state.
-        self.game_state = GameState(self.players, self.grid_size, self.mock_script_dir) # Fresh state
+        # Use the updated player_configurations for GameState initialization
+        self.game_state = GameState(self.player_configurations, self.grid_size, self.mock_script_dir) # Fresh state
         self.game_state.notify_callbacks = MagicMock()
         
         self.assertTrue(len(self.game_state.available_company_names) > 0, "Precondition: Should have available company names.")
@@ -369,16 +384,14 @@ class TestDiamondPlacement(unittest.TestCase):
         
         new_diamond_coord = (7, 8) # Adjacent
         
-        current_player = self.game_state.players[self.game_state.current_player_index]
-        # Note: player_has_moved is not directly set by place_diamond if a company is formed by diamonds (current_player=None)
-        # However, the sub-call to create_new_company would set it if current_player was passed.
-        # The original place_diamond logic for company formation via diamonds doesn't set player_has_moved for the *current_player*.
-        # This test should focus on company formation.
-        
-        success, message = self.game_state.place_diamond(new_diamond_coord)
+        current_player_profile_name = self.game_state.players[self.game_state.current_player_index]
+        # place_diamond now takes current_player argument.
+        success, message = self.game_state.place_diamond(new_diamond_coord, current_player_profile_name)
         
         self.assertTrue(success)
-        expected_message_part = f"A new company '{expected_new_company_name}' was created from diamonds!"
+        # If a player action (placing a diamond) leads to company formation,
+        # and that player gets bonus shares, the message should reflect player agency.
+        expected_message_part = f"{current_player_profile_name} created {expected_new_company_name}!"
         self.assertEqual(message, expected_message_part)
         
         # Diamonds should be consumed and removed from diamond_positions
@@ -395,33 +408,35 @@ class TestDiamondPlacement(unittest.TestCase):
 class TestBonusShares(unittest.TestCase):
     def setUp(self):
         self.mock_script_dir = os.path.dirname(__file__)
-        self.players = ["Player1", "Player2"]
+        self.player_configurations = [
+            {'profile_username': 'Player1', 'type': 'Human', 'is_new_profile': False},
+            {'profile_username': 'Player2', 'type': 'Human', 'is_new_profile': False}
+        ]
         self.grid_size = (10, 10)
-        self.game_state = GameState(self.players, self.grid_size, self.mock_script_dir)
+        self.game_state = GameState(self.player_configurations, self.grid_size, self.mock_script_dir)
         self.game_state.notify_callbacks = MagicMock() # Mock notify_callbacks
 
     def test_bonus_shares_on_direct_player_creation(self):
         """
         Test if 5 bonus shares are awarded when a player directly creates a new company.
         """
-        current_player = self.game_state.players[0]
+        current_player_profile_name = self.game_state.players[0]
         coord_input = (0, 0)
         
         # Ensure player has no shares of this potential company initially
-        # (though company name is not known yet, this is more of a conceptual check)
-        self.assertEqual(len(self.game_state.player_shares[current_player]), 0)
+        self.assertEqual(len(self.game_state.player_shares[current_player_profile_name]), 0)
 
-        new_company_name, msg = self.game_state.create_new_company(coord_input, current_player)
+        new_company_name, msg = self.game_state.create_new_company(coord_input, current_player_profile_name)
 
         self.assertIsNotNone(new_company_name, f"Company creation failed: {msg}")
-        self.assertIn(new_company_name, self.game_state.player_shares[current_player], "New company not found in player's shares.")
-        self.assertEqual(self.game_state.player_shares[current_player][new_company_name], 5, "Player should have 5 bonus shares.")
+        self.assertIn(new_company_name, self.game_state.player_shares[current_player_profile_name], "New company not found in player's shares.")
+        self.assertEqual(self.game_state.player_shares[current_player_profile_name][new_company_name], 5, "Player should have 5 bonus shares.")
 
     def test_bonus_shares_on_place_diamond_forms_company(self):
         """
         Test if 5 bonus shares are awarded when a player places a diamond that forms a new company.
         """
-        current_player = self.game_state.players[0]
+        current_player_profile_name = self.game_state.players[0]
         initial_diamond_coord = (0, 0)
         new_diamond_coord = (0, 1) # Adjacent to initial_diamond_coord
 
@@ -431,15 +446,19 @@ class TestBonusShares(unittest.TestCase):
         self.assertTrue(len(self.game_state.available_company_names) > 0, "No available company names for test setup.")
         expected_company_name = self.game_state.available_company_names[0]
 
-        success, message = self.game_state.place_diamond(new_diamond_coord, current_player)
+        success, message = self.game_state.place_diamond(new_diamond_coord, current_player_profile_name)
 
         self.assertTrue(success, f"Placing diamond failed: {message}")
-        self.assertIn(expected_company_name, message, "Message should indicate company creation.") # Check message
+        # The message from place_diamond -> create_new_company will include the player's name if current_player is passed
+        expected_message_part = f"{current_player_profile_name} created {expected_company_name}!"
+        # If create_new_company is called with current_player=None (original diamond logic), message changes.
+        # Based on current place_diamond, it *does* pass current_player to create_new_company.
+        self.assertEqual(message, expected_message_part, "Message should indicate company creation by player.")
         
         # Verify company was formed and shares awarded
         self.assertIn(expected_company_name, self.game_state.company_info, "Company info not created.")
-        self.assertIn(expected_company_name, self.game_state.player_shares[current_player], f"Company {expected_company_name} not in {current_player}'s shares.")
-        self.assertEqual(self.game_state.player_shares[current_player][expected_company_name], 5, "Player should have 5 bonus shares.")
+        self.assertIn(expected_company_name, self.game_state.player_shares[current_player_profile_name], f"Company {expected_company_name} not in {current_player_profile_name}'s shares.")
+        self.assertEqual(self.game_state.player_shares[current_player_profile_name][expected_company_name], 5, "Player should have 5 bonus shares.")
         
         # Verify diamonds were consumed
         self.assertNotIn(initial_diamond_coord, self.game_state.diamond_positions)
@@ -450,15 +469,15 @@ class TestBonusShares(unittest.TestCase):
         Test if 5 bonus shares are awarded when a player's action leads to creating
         a multi-tile company (simulated by direct call to create_new_company with multiple coords).
         """
-        current_player = self.game_state.players[0]
+        current_player_profile_name = self.game_state.players[0]
         # These coordinates would typically be a mix of a newly placed tile and adjacent diamonds
         company_coords = [(0,0), (0,1), (1,0)] 
         
-        new_company_name, msg = self.game_state.create_new_company(coords_input=company_coords, current_player=current_player)
+        new_company_name, msg = self.game_state.create_new_company(coords_input=company_coords, current_player=current_player_profile_name)
 
         self.assertIsNotNone(new_company_name, f"Company creation failed: {msg}")
-        self.assertIn(new_company_name, self.game_state.player_shares[current_player], "New company not in player's shares.")
-        self.assertEqual(self.game_state.player_shares[current_player][new_company_name], 5, "Player should have 5 bonus shares for multi-tile company.")
+        self.assertIn(new_company_name, self.game_state.player_shares[current_player_profile_name], "New company not in player's shares.")
+        self.assertEqual(self.game_state.player_shares[current_player_profile_name][new_company_name], 5, "Player should have 5 bonus shares for multi-tile company.")
 
     def test_no_bonus_shares_if_current_player_is_none(self):
         """
