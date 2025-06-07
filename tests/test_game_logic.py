@@ -12,8 +12,8 @@ class TestGameLogicOMarkerBonus(unittest.TestCase):
     def setUp(self):
         self.mock_script_dir = os.path.dirname(__file__) 
         self.player_configurations = [
-            {'profile_username': 'Player1', 'type': 'Human', 'is_new_profile': False},
-            {'profile_username': 'Player2', 'type': 'Human', 'is_new_profile': False}
+            {'name': 'Player1', 'profile_username': 'Player1', 'type': 'Human', 'is_new_profile': False},
+            {'name': 'Player2', 'profile_username': 'Player2', 'type': 'Human', 'is_new_profile': False}
         ]
         self.grid_size = (10, 10)
         self.game_state = GameState(self.player_configurations, self.grid_size, self.mock_script_dir)
@@ -121,7 +121,7 @@ class TestGameLogicMergers(unittest.TestCase):
     def setUp(self):
         self.mock_script_dir = os.path.dirname(__file__)
         self.player_configurations = [
-            {'profile_username': 'Player1', 'type': 'Human', 'is_new_profile': False}
+            {'name': 'Player1', 'profile_username': 'Player1', 'type': 'Human', 'is_new_profile': False}
         ]
         self.grid_size = (10, 10)
         self.game_state = GameState(self.player_configurations, self.grid_size, self.mock_script_dir)
@@ -278,8 +278,8 @@ class TestDiamondPlacement(unittest.TestCase):
     def setUp(self):
         self.mock_script_dir = os.path.dirname(__file__)
         self.player_configurations = [
-            {'profile_username': 'Player1', 'type': 'Human', 'is_new_profile': False},
-            {'profile_username': 'Player2', 'type': 'Human', 'is_new_profile': False}
+            {'name': 'Player1', 'profile_username': 'Player1', 'type': 'Human', 'is_new_profile': False},
+            {'name': 'Player2', 'profile_username': 'Player2', 'type': 'Human', 'is_new_profile': False}
         ]
         self.grid_size = (10, 10)
         self.game_state = GameState(self.player_configurations, self.grid_size, self.mock_script_dir)
@@ -409,8 +409,8 @@ class TestBonusShares(unittest.TestCase):
     def setUp(self):
         self.mock_script_dir = os.path.dirname(__file__)
         self.player_configurations = [
-            {'profile_username': 'Player1', 'type': 'Human', 'is_new_profile': False},
-            {'profile_username': 'Player2', 'type': 'Human', 'is_new_profile': False}
+            {'name': 'Player1', 'profile_username': 'Player1', 'type': 'Human', 'is_new_profile': False},
+            {'name': 'Player2', 'profile_username': 'Player2', 'type': 'Human', 'is_new_profile': False}
         ]
         self.grid_size = (10, 10)
         self.game_state = GameState(self.player_configurations, self.grid_size, self.mock_script_dir)

@@ -203,5 +203,72 @@ class TestProfileManager(unittest.TestCase):
         self.assertIn("beta", profile_names)
         self.assertEqual(len(profile_names), 2)
 
+    def test_rename_profile_success(self):
+        old_username = "user_to_rename"
+        new_username = "user_renamed"
+        self.profile_manager.create_profile(old_username)
+
+        self.assertTrue(self.profile_manager.rename_profile(old_username, new_username))
+
+        self.assertNotIn(old_username, self.profile_manager.profiles)
+        self.assertNotIn(old_username, self.profile_manager.list_profile_names())
+        old_filepath = os.path.join(self.test_profiles_dir, f"{old_username}.json")
+        self.assertFalse(os.path.exists(old_filepath))
+
+        self.assertIn(new_username, self.profile_manager.profiles)
+        self.assertIn(new_username, self.profile_manager.list_profile_names())
+        new_filepath = os.path.join(self.test_profiles_dir, f"{new_username}.json")
+        self.assertTrue(os.path.exists(new_filepath))
+
+        renamed_profile = self.profile_manager.get_profile(new_username)
+        self.assertIsNotNone(renamed_profile)
+        self.assertEqual(renamed_profile.username, new_username)
+
+    def test_rename_profile_new_name_exists(self):
+        user_a = "userA"
+        user_b = "userB"
+        self.profile_manager.create_profile(user_a)
+        self.profile_manager.create_profile(user_b)
+
+        with self.assertRaisesRegex(ValueError, f"Profile '{user_b}' already exists."):
+            self.profile_manager.rename_profile(user_a, user_b)
+
+        # Verify userA still exists and is unchanged
+        self.assertIn(user_a, self.profile_manager.profiles)
+        self.assertTrue(os.path.exists(os.path.join(self.test_profiles_dir, f"{user_a}.json")))
+        profile_a = self.profile_manager.get_profile(user_a)
+        self.assertEqual(profile_a.username, user_a)
+
+
+    def test_rename_profile_old_name_not_exists(self):
+        with self.assertRaisesRegex(ValueError, "Profile 'nonexistentuser' not found."):
+            self.profile_manager.rename_profile("nonexistentuser", "newname")
+
+    def test_rename_profile_empty_new_name(self):
+        user1 = "user1_for_empty_rename"
+        self.profile_manager.create_profile(user1)
+        with self.assertRaisesRegex(ValueError, "New username cannot be empty."):
+            self.profile_manager.rename_profile(user1, "")
+        with self.assertRaisesRegex(ValueError, "New username cannot be empty."):
+            self.profile_manager.rename_profile(user1, "   ")
+
+    def test_delete_profile_success(self):
+        username_to_delete = "user_to_delete"
+        self.profile_manager.create_profile(username_to_delete)
+
+        # Ensure file exists before deletion for a complete test
+        filepath = os.path.join(self.test_profiles_dir, f"{username_to_delete}.json")
+        self.assertTrue(os.path.exists(filepath))
+
+        self.assertTrue(self.profile_manager.delete_profile(username_to_delete))
+
+        self.assertNotIn(username_to_delete, self.profile_manager.profiles)
+        self.assertNotIn(username_to_delete, self.profile_manager.list_profile_names())
+        self.assertFalse(os.path.exists(filepath))
+
+    def test_delete_profile_non_existent(self):
+        with self.assertRaisesRegex(ValueError, "Profile 'nonexistentuser' not found."):
+            self.profile_manager.delete_profile("nonexistentuser")
+
 if __name__ == '__main__':
     unittest.main()
