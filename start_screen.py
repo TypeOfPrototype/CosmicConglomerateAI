@@ -355,9 +355,6 @@ class StartScreen(Screen):
 
         if len(player_configurations) < 1:
             self._show_error_popup('At least one player (Human or AI) must be active.')
-                size_hint=(0.6, 0.4)
-            )
-            error_popup.open()
             return
 
         # Retrieve grid size
