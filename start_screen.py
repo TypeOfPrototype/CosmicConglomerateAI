@@ -164,8 +164,8 @@ class StartScreen(Screen):
             font_name=FONT_PATH
         )
         self.grid_size_spinner = Spinner(
-            text='22x18',
-            values=['16x12', '22x18', '28x24'],
+            text='18x22',
+            values=['12x16', '18x22', '24x28'],
             size_hint=(0.7, 1),
             font_size=24,
             background_normal='',
