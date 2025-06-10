@@ -41,6 +41,7 @@ class GameScreen(Screen):
 
     def initialize_game(self, player_configurations, grid_size, game_turn_length, marker_percentage=0.1): # player_names -> player_configurations
         self.main_layout.clear_widgets()
+        self.o_marker_buttons = []
 
         # Initialize ProfileManager and player profile objects
         self.profile_manager = ProfileManager()
@@ -222,6 +223,7 @@ class GameScreen(Screen):
                         background_color=[0.2, 0.2, 0.2, 1],  # Match grid background
                         color=(1, 1, 1, 1)  # White text for contrast
                     )
+                    self.o_marker_buttons.append(btn)
                 else:
                     btn = ImageButton(
                         source='',  # Initially no image
@@ -241,6 +243,12 @@ class GameScreen(Screen):
 
         # Pass the collected 'O' marker locations to GameState
         self.game_state.set_initial_o_marker_locations(o_marker_locations_set)
+
+        # Animate 'O' marker buttons
+        for button_instance in self.o_marker_buttons:
+            anim = (Animation(color=(0.3, 0.7, 1, 1), font_size=26, duration=0.6) + Animation(color=(1, 1, 1, 1), font_size=24, duration=0.6))
+            anim.repeat = True
+            anim.start(button_instance)
 
         self.game_layout.add_widget(self.grid_layout)
 
