@@ -12,9 +12,10 @@ from kivy.uix.slider import Slider
 from kivy.uix.togglebutton import ToggleButton
 from kivy.uix.image import Image
 from kivy.uix.gridlayout import GridLayout
+from kivy.uix.widget import Widget # Added Widget
 from kivy.properties import StringProperty, NumericProperty
 from kivy.core.window import Window
-from kivy.graphics import Color, Rectangle
+from kivy.graphics import Color, Rectangle, Ellipse # Added Ellipse
 from kivy.clock import Clock
 from kivy.animation import Animation
 from kivy.app import App # Added import
@@ -22,6 +23,59 @@ from kivy.app import App # Added import
 from custom_widgets import ImageButton
 from game_logic import GameState
 from profile_manager import ProfileManager, UserProfile
+
+
+# Custom Widget for 'O' Markers for optimized animations
+class OMarkerWidget(Widget):
+    ellipse_current_scale = NumericProperty(0.8)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        with self.canvas:
+            self.ellipse_color_instruction = Color(0, 0.4, 0.6, 1)  # Initial Blue-Teal color
+            self.ellipse_instruction = Ellipse(
+                # Initial pos/size will be updated by _update_ellipse_visuals
+                # Set to small initial values to avoid visual glitch if not updated immediately
+                pos=(self.center_x - 5, self.center_y - 5),
+                size=(10, 10)
+            )
+
+        # Bind properties to the update method
+        self.bind(pos=self._update_ellipse_visuals,
+                  size=self._update_ellipse_visuals,
+                  ellipse_current_scale=self._update_ellipse_visuals)
+
+        # Call once to set initial visuals based on actual size and scale
+        # This might be better called via Clock.schedule_once to ensure layout has occurred
+        # For now, direct call assuming initial properties are somewhat valid or will be updated.
+        self._update_ellipse_visuals()
+
+
+    def _update_ellipse_visuals(self, instance=None, value=None):
+        # This method updates the ellipse based on the widget's properties
+        scale = self.ellipse_current_scale
+
+        # Calculate position and size for the ellipse to be centered
+        ellipse_width = self.width * scale
+        ellipse_height = self.height * scale
+
+        self.ellipse_instruction.pos = (self.center_x - ellipse_width / 2,
+                                        self.center_y - ellipse_height / 2)
+        self.ellipse_instruction.size = (ellipse_width, ellipse_height)
+
+    def start_animations(self):
+        # Color Animation (shifting RGBA for color and opacity)
+        color_anim = (Animation(rgba=(0.1, 0.5, 0.7, 0.7), duration=2.0, t='in_out_sine') +
+                      Animation(rgba=(0, 0.4, 0.6, 1.0), duration=2.0, t='in_out_sine'))
+        color_anim.repeat = True
+        color_anim.start(self.ellipse_color_instruction)
+
+        # Size Animation for ellipse_current_scale
+        # Kivy's property system will automatically trigger _update_ellipse_visuals
+        size_pulse_anim = (Animation(ellipse_current_scale=0.9, duration=1.5, t='in_out_sine') +
+                         Animation(ellipse_current_scale=0.7, duration=1.5, t='in_out_sine'))
+        size_pulse_anim.repeat = True
+        size_pulse_anim.start(self) # Start on self (the OMarkerWidget instance)
 
 
 class GameScreen(Screen):
@@ -216,14 +270,17 @@ class GameScreen(Screen):
             button_row = []
             for col in range(self.grid_size[0]):
                 if (row, col) in o_marker_locations_set:
-                    btn = Button(
-                        text="O",
-                        font_size=24,
-                        background_normal='',
-                        background_color=[0.2, 0.2, 0.2, 1],  # Match grid background
-                        color=(1, 1, 1, 1)  # White text for contrast
-                    )
+                    # Instantiate the custom OMarkerWidget
+                    btn = OMarkerWidget()
+
+                    # Add the new widget to o_marker_buttons list
                     self.o_marker_buttons.append(btn)
+
+                    # Start its animations
+                    # It's better to schedule this to ensure the widget has been added to layout
+                    # and has its initial size determined, so animations are smooth.
+                    Clock.schedule_once(lambda dt, widget=btn: widget.start_animations(), 0)
+
                 else:
                     btn = ImageButton(
                         source='',  # Initially no image
@@ -244,11 +301,8 @@ class GameScreen(Screen):
         # Pass the collected 'O' marker locations to GameState
         self.game_state.set_initial_o_marker_locations(o_marker_locations_set)
 
-        # Animate 'O' marker buttons
-        for button_instance in self.o_marker_buttons:
-            anim = (Animation(color=(0.3, 0.7, 1, 1), font_size=26, duration=0.6) + Animation(color=(1, 1, 1, 1), font_size=24, duration=0.6))
-            anim.repeat = True
-            anim.start(button_instance)
+        # Removed animation for 'O' marker buttons as per subtask instructions
+        # The new 'O' markers are Widgets with Ellipses, not Buttons with text/color animations.
 
         self.game_layout.add_widget(self.grid_layout)
 
@@ -816,8 +870,10 @@ class GameScreen(Screen):
                     # Reset color to default regardless of source
                     button.color = [1, 1, 1, 1]
                     button.disabled = True  # Disable all buttons
-                else:
-                    if button.background_color == [0.3, 0.3, 0.8, 1]:  # Light blue
+                elif isinstance(button, Widget): # Check if it's one of our new 'O' marker Widgets
+                    button.disabled = True # Also disable these, though they don't interact yet
+                else: # This case might not be hit if all buttons are ImageButton or Widget now
+                    if hasattr(button, 'background_color') and button.background_color == [0.3, 0.3, 0.8, 1]:  # Light blue
                         button.background_color = [0.2, 0.2, 0.2, 1]  # Reset to dark grey
                     button.disabled = True  # Disable all buttons
 
