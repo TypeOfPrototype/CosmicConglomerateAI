@@ -234,10 +234,56 @@ class GameScreen(Screen):
         )
         self.game_layout.add_widget(self.info_label)
 
+        # Container for grid + labels
+        grid_plus_labels_container = BoxLayout(orientation='vertical', size_hint=(1, 0.85))
+
+        # Row for column labels and top-left spacer
+        col_labels_and_spacer_row = BoxLayout(orientation='horizontal', size_hint=(1, 0.05))
+
+        # Top-left corner spacer
+        corner_spacer = Widget(size_hint=(0.05, 1))
+        col_labels_and_spacer_row.add_widget(corner_spacer)
+
+        # Column labels layout
+        self.col_labels_layout = BoxLayout(orientation='horizontal', size_hint=(0.95, 1))
+        col_labels_and_spacer_row.add_widget(self.col_labels_layout)
+
+        grid_plus_labels_container.add_widget(col_labels_and_spacer_row)
+
+        # Row for the main grid and row labels
+        grid_and_row_labels_row = BoxLayout(orientation='horizontal', size_hint=(1, 0.95))
+
+        # Row labels layout
+        self.row_labels_layout = BoxLayout(orientation='vertical', size_hint=(0.05, 1))
+        grid_and_row_labels_row.add_widget(self.row_labels_layout)
+
         # Grid layout for the game board
-        self.grid_size = grid_size
+        self.grid_size = grid_size # Ensure grid_size is assigned before using it for labels
+
+        # Populate Column Labels
+        for i in range(1, self.grid_size[0] + 1):
+            label = Label(
+                text=str(i),
+                size_hint=(1, 1), # Even distribution
+                halign='center',
+                valign='middle',
+                font_size=Window.height * 0.015
+            )
+            self.col_labels_layout.add_widget(label)
+
+        # Populate Row Labels
+        for i in range(1, self.grid_size[1] + 1):
+            label = Label(
+                text=str(i),
+                size_hint=(1, 1), # Even distribution
+                halign='center',
+                valign='middle',
+                font_size=Window.height * 0.015
+            )
+            self.row_labels_layout.add_widget(label)
+
         self.grid_layout = GridLayout(
-            cols=self.grid_size[0], rows=self.grid_size[1], spacing=1, size_hint=(1, 0.85)
+            cols=self.grid_size[0], rows=self.grid_size[1], spacing=1, size_hint=(0.95, 1) # Adjusted size_hint
         )
         with self.grid_layout.canvas.before:
             Color(0.2, 0.2, 0.2, 1)  # Darker grey background
@@ -304,7 +350,10 @@ class GameScreen(Screen):
         # Removed animation for 'O' marker buttons as per subtask instructions
         # The new 'O' markers are Widgets with Ellipses, not Buttons with text/color animations.
 
-        self.game_layout.add_widget(self.grid_layout)
+        grid_and_row_labels_row.add_widget(self.grid_layout) # Add grid_layout to its new parent
+        grid_plus_labels_container.add_widget(grid_and_row_labels_row) # Add the row containing grid and row labels
+
+        self.game_layout.add_widget(grid_plus_labels_container) # Add the main container to game_layout
 
         # Button layout for additional actions
         button_layout = BoxLayout(
