@@ -391,8 +391,10 @@ class StartScreen(Screen):
         anim += Animation(size=original_size, duration=0.4, t='in_sine')
 
         # 3. Fade out.
-        # Original fade_out had a 1.0s delay. Pulse took 0.8s. So keep a small 0.2s delay.
-        anim += Animation(opacity=0, duration=1.0, t='in_cubic', delay=0.2)
+        # Explicitly create a pause animation step.
+        anim += Animation(duration=0.2) # This creates a 0.2 second pause
+        # Then, the opacity animation without its own delay parameter.
+        anim += Animation(opacity=0, duration=1.0, t='in_cubic')
 
         # Define what happens when the sequence completes
         def reset_and_restart_animation(_animation_instance, _widget_in_animation):
