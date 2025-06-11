@@ -9,6 +9,7 @@ from kivy.uix.button import Button
 from kivy.uix.popup import Popup
 from kivy.uix.spinner import Spinner
 from kivy.uix.slider import Slider
+from kivy.uix.switch import Switch # Added for fullscreen toggle
 from kivy.uix.togglebutton import ToggleButton
 from kivy.uix.image import Image
 from kivy.uix.gridlayout import GridLayout
@@ -1093,6 +1094,25 @@ class GameScreen(Screen):
         # Spacer or separator can be added here if needed for visual separation
         # content_layout.add_widget(Label(size_hint_y=None, height=20)) # Example spacer
 
+        # Fullscreen Toggle Setting
+        fullscreen_setting_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=44)
+
+        fullscreen_label = Label(text="Fullscreen:", size_hint_x=0.7)
+        self.fullscreen_switch = Switch(size_hint_x=0.3) # active state will be set below
+
+        # Initialize the switch's state based on the current Window.fullscreen value
+        current_fullscreen_state = False
+        if Window.fullscreen == 'auto' or Window.fullscreen == True or Window.fullscreen == 'fake':
+            current_fullscreen_state = True
+        self.fullscreen_switch.active = current_fullscreen_state
+        print(f"Settings popup: Initial fullscreen switch state set to: {self.fullscreen_switch.active} based on Window.fullscreen: {Window.fullscreen}")
+
+        self.fullscreen_switch.bind(active=self.on_fullscreen_toggle)
+
+        fullscreen_setting_layout.add_widget(fullscreen_label)
+        fullscreen_setting_layout.add_widget(self.fullscreen_switch)
+        content_layout.add_widget(fullscreen_setting_layout)
+
         restart_button = Button(text="Restart Game", size_hint_y=None, height=44)
         restart_button.bind(on_press=self.restart_game_action)
         content_layout.add_widget(restart_button)
@@ -1108,6 +1128,17 @@ class GameScreen(Screen):
             size_hint=(0.6, 0.4) # 60% width, 40% height
         )
         self.settings_popup.open()
+
+    def on_fullscreen_toggle(self, switch_instance, active_state):
+        if active_state:
+            Window.fullscreen = 'auto'
+            print("Fullscreen enabled by toggle.")
+        else:
+            Window.fullscreen = False
+            # It's good practice to set a specific size when disabling fullscreen
+            Window.size = (1200, 800) # Or your preferred default windowed size
+            print(f"Fullscreen disabled by toggle. Window size set to {Window.size}.")
+        # Optional: Save preference logic can be added here or called from here.
 
     def restart_game_action(self, instance):
         """

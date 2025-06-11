@@ -9,6 +9,7 @@ from kivy.uix.spinner import Spinner
 from kivy.uix.slider import Slider
 from kivy.uix.button import Button
 from kivy.uix.popup import Popup
+from kivy.uix.image import Image
 from kivy.uix.checkbox import CheckBox
 from kivy.graphics import Color, Rectangle, RoundedRectangle
 from kivy.core.window import Window
@@ -56,6 +57,21 @@ class StartScreen(Screen):
             font_name=FONT_PATH
         )
         layout.add_widget(self.title_label)
+
+        self.loading_animation_widget = Image(
+            source='assets/images/icon.png',
+            opacity=0,
+            size_hint=(None, None),
+            size=(dp(80), dp(80)), # Using dp for size
+            allow_stretch=True,
+            keep_ratio=True,
+            pos_hint = {'center_x': -0.2, 'center_y': 0.75} # Initial pos_hint
+        )
+        # Add this widget to the main layout.
+        # It should be added after the background and title, but before other interactive elements
+        # if it's meant to be a significant visual element during setup.
+        # Let's add it after the title label.
+        layout.add_widget(self.loading_animation_widget)
 
         # Player configuration inputs
         self.player_configs = []
@@ -260,6 +276,22 @@ class StartScreen(Screen):
         # Animate the title and start button
         self.animate_widgets()
 
+    def on_enter(self, *args):
+        # Start existing fade-in animations for title and button if they should run on each entry
+        # For now, let's assume animate_widgets() is for one-time setup,
+        # and we only restart the loading animation.
+        # If title/button also need to re-animate on enter, call self.animate_widgets() here.
+        # Otherwise, ensure animate_widgets is called from build_ui (which it is).
+
+        # Start the loading animation
+        self.start_loading_animation()
+
+    def on_leave(self, *args):
+        # Stop the loading animation and hide the widget
+        if hasattr(self, 'loading_animation_widget'): # Ensure widget exists
+            Animation.cancel_all(self.loading_animation_widget)
+            self.loading_animation_widget.opacity = 0
+
     def _update_bg(self, instance, value):
         self.bg_gradient.pos = instance.pos
         self.bg_gradient.size = instance.size
@@ -333,6 +365,48 @@ class StartScreen(Screen):
             Animation(opacity=1, duration=2).start(self.start_button)
 
         Clock.schedule_once(start_button_fade_in, 1)  # 1-second delay
+
+        # self.start_loading_animation() # Removed: Now called from on_enter
+
+    def start_loading_animation(self):
+        widget = self.loading_animation_widget
+        original_size = (dp(80), dp(80))
+        pulsed_size = (dp(90), dp(90))
+
+        # Initial state for each loop iteration
+        widget.pos_hint = {'center_x': -0.2, 'center_y': 0.75}
+        widget.opacity = 0
+        widget.size = original_size # Ensure original size at start
+
+        # 1. Move to center, fade in. Size remains original.
+        anim = Animation(
+            pos_hint={'center_x': 0.5, 'center_y': 0.75},
+            opacity=1,
+            duration=1.5,
+            t='out_cubic'
+        )
+
+        # 2. Pulse effect: Grow, then shrink.
+        anim += Animation(size=pulsed_size, duration=0.4, t='out_sine')
+        anim += Animation(size=original_size, duration=0.4, t='in_sine')
+
+        # 3. Fade out.
+        # Explicitly create a pause animation step.
+        anim += Animation(duration=0.2) # This creates a 0.2 second pause
+        # Then, the opacity animation without its own delay parameter.
+        anim += Animation(opacity=0, duration=1.0, t='in_cubic')
+
+        # Define what happens when the sequence completes
+        def reset_and_restart_animation(_animation_instance, _widget_in_animation):
+            # Reset properties for the next loop
+            widget.pos_hint = {'center_x': -0.2, 'center_y': 0.75} # Reset to starting pos_hint
+            widget.opacity = 0
+            widget.size = original_size # Reset size here
+            # Restart the animation on the widget
+            anim.start(widget)
+
+        anim.bind(on_complete=reset_and_restart_animation)
+        anim.start(widget)
 
     def start_game(self, instance):
         player_configurations = []
@@ -427,12 +501,32 @@ class StartScreen(Screen):
         except (ValueError, TypeError):
             game_turn_length = 80  # Default turn length
 
-        # Pass configuration to the game screen
-        self.manager.current = 'game'
+        # All data gathered, update UI for loading state
+        self.start_button.text = "Loading..."
+        self.start_button.disabled = True
+
         marker_percentage = self.marker_percentage_slider.value / 100.0
+        game_params = {
+            'player_configurations': player_configurations,
+            'grid_size': (cols, rows),
+            'game_turn_length': game_turn_length,
+            'marker_percentage': marker_percentage
+        }
+
+        # Schedule the actual screen transition
+        Clock.schedule_once(lambda dt: self._perform_screen_transition(game_params), 2.0)
+
+    def _perform_screen_transition(self, game_params):
+        self.manager.current = 'game'
         self.manager.get_screen('game').initialize_game(
-            player_configurations, (cols, rows), game_turn_length, marker_percentage
+            game_params['player_configurations'],
+            game_params['grid_size'],
+            game_params['game_turn_length'],
+            game_params['marker_percentage']
         )
+        # Reset the start button's text and enabled state for when the user returns
+        self.start_button.text = "Start Game"
+        self.start_button.disabled = False
 
     def _show_error_popup(self, message):
         error_popup = Popup(
