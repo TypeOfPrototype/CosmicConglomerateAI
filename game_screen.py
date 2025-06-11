@@ -381,6 +381,34 @@ class GameScreen(Screen):
         # Start the first turn
         self.next_turn()
 
+        Clock.schedule_once(self._finalize_initial_layout, 0.5) # 0.5s delay
+
+    def _finalize_initial_layout(self, dt):
+        print("Executing _finalize_initial_layout: opening sidebar first.")
+
+        # Ensure sidebar_visible is False before opening, so animate_sidebar_open runs correctly.
+        # This also means that animate_sidebar_open will set self.sidebar_visible = True
+        self.sidebar_visible = False
+        self.animate_sidebar_open()
+
+        # Schedule the close animation to happen after the open animation has likely completed.
+        # The open animation is 0.3s. We'll schedule close for 0.5s after this method starts.
+        Clock.schedule_once(lambda edt: self._actually_close_initial_sidebar(), 0.5)
+
+    def _actually_close_initial_sidebar(self):
+        print("Executing _actually_close_initial_sidebar.")
+        # At this point, sidebar_visible should be True due to animate_sidebar_open()
+        # having been called and completed.
+        if self.sidebar_visible:
+             self.animate_sidebar_close()
+        else:
+            # This case might indicate a timing issue or unexpected state change.
+            print("Warning: Sidebar was not visible as expected before attempting to close in initial sequence.")
+            # As a fallback, still try to run animate_sidebar_close as it sets the final layout properties
+            # and ensures sidebar_visible is False.
+            self.sidebar_visible = True # Temporarily set to true so animate_sidebar_close runs fully
+            self.animate_sidebar_close()
+
     def handle_game_state_update(self, updated_entries):
         """
         Callback function to handle updates from GameState.
@@ -1203,12 +1231,30 @@ class GameScreen(Screen):
         # This current implementation changes font_size for labels directly managed by GameScreen.
 
     def _trigger_grid_layout_update(self, animation, widget):
-        # It's good practice to check if the layouts exist, though they should.
+        if hasattr(self, 'main_layout') and self.main_layout and \
+           hasattr(self, 'game_layout') and self.game_layout:
+            if self.sidebar_visible: # Sidebar has just opened
+                # Ensure game_layout's width is updated based on its size_hint_x
+                # now that the sidebar has taken its space.
+                if self.game_layout.size_hint_x is not None:
+                     self.game_layout.width = self.main_layout.width * self.game_layout.size_hint_x
+                else:
+                    # This case should ideally not be hit if sidebar_visible is true,
+                    # as animate_sidebar_open sets size_hint_x.
+                    # But as a fallback, if size_hint_x is None, make it take remaining space.
+                    self.game_layout.width = self.main_layout.width - self.sidebar_layout.width
+            else: # Sidebar has just closed
+                # animate_sidebar_close already set game_layout.width = self.main_layout.width
+                # and game_layout.size_hint_x = None.
+                # We can re-assert width here if necessary, but it might be redundant.
+                # For now, we assume animate_sidebar_close handled it.
+                pass
+
         if hasattr(self, 'game_layout') and self.game_layout:
             self.game_layout.do_layout()
         if hasattr(self, 'grid_layout') and self.grid_layout:
             self.grid_layout.do_layout()
-        print("Triggered grid layout update via on_complete") # Optional: for debugging
+        print(f"Triggered grid layout update. Sidebar visible: {self.sidebar_visible}")
 
     def toggle_sidebar(self, instance):
         """
@@ -1225,9 +1271,13 @@ class GameScreen(Screen):
         Animates the sidebar to open (slide in from the left).
         """
         self.sidebar_visible = True
+        # Restore size_hint_x for game_layout so it resizes relative to sidebar
         self.game_layout.size_hint_x = 1 - self.sidebar_original_width_hint
+        # Explicit width for game_layout will be set in _trigger_grid_layout_update
+        # based on this new size_hint_x after sidebar animation.
+
         anim = Animation(size_hint_x=self.sidebar_original_width_hint, opacity=1, duration=0.3)
-        anim.bind(on_complete=self._trigger_grid_layout_update) # New line
+        anim.bind(on_complete=self._trigger_grid_layout_update)
         anim.start(self.sidebar_layout)
 
     def animate_sidebar_close(self):
@@ -1235,7 +1285,10 @@ class GameScreen(Screen):
         Animates the sidebar to close (slide out to the left).
         """
         self.sidebar_visible = False
-        self.game_layout.size_hint_x = 1.0
+        # Set game_layout to use explicit width BEFORE sidebar animation starts closing
+        self.game_layout.size_hint_x = None
+        self.game_layout.width = self.main_layout.width # Attempt to take full width
+
         anim = Animation(size_hint_x=0, opacity=0, duration=0.3)
-        anim.bind(on_complete=self._trigger_grid_layout_update) # New line
+        anim.bind(on_complete=self._trigger_grid_layout_update)
         anim.start(self.sidebar_layout)
