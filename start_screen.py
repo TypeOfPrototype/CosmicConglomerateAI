@@ -11,7 +11,7 @@ from kivy.uix.button import Button
 from kivy.uix.popup import Popup
 from kivy.uix.image import Image
 from kivy.uix.checkbox import CheckBox
-from kivy.graphics import Color, Rectangle, RoundedRectangle
+from kivy.graphics import Color, Rectangle, RoundedRectangle, PushMatrix, PopMatrix, Rotate
 from kivy.core.window import Window
 from kivy.animation import Animation
 from kivy.properties import ObjectProperty
@@ -36,6 +36,8 @@ class StartScreen(Screen):
         # Initialize ProfileManager
         self.profile_manager = ProfileManager()
         self.existing_profile_names = self.profile_manager.list_profile_names()
+        self.icon_rotation = None
+        self.rotation_started = False
         self.build_ui()
 
     def build_ui(self):
@@ -62,16 +64,28 @@ class StartScreen(Screen):
             source='assets/images/icon.png',
             opacity=0,
             size_hint=(None, None),
-            size=(dp(80), dp(80)), # Using dp for size
+            size=(dp(100), dp(100)), # Using dp for size
             allow_stretch=True,
             keep_ratio=True,
-            pos_hint = {'center_x': -0.2, 'center_y': 0.75} # Initial pos_hint
+            pos_hint = {'center_x': -0.2, 'center_y': 0.7} # Initial pos_hint
         )
         # Add this widget to the main layout.
         # It should be added after the background and title, but before other interactive elements
         # if it's meant to be a significant visual element during setup.
         # Let's add it after the title label.
         layout.add_widget(self.loading_animation_widget)
+
+        # Add rotation to the icon
+        with self.loading_animation_widget.canvas.before:
+            PushMatrix()
+            self.icon_rotation = Rotate()
+            self.icon_rotation.angle = 0
+            self.icon_rotation.origin = self.loading_animation_widget.center
+        with self.loading_animation_widget.canvas.after:
+            PopMatrix()
+
+        # Bind icon's center to update rotation origin
+        self.loading_animation_widget.bind(center=self._update_rotation_origin)
 
         # Player configuration inputs
         self.player_configs = []
@@ -290,7 +304,16 @@ class StartScreen(Screen):
         # Stop the loading animation and hide the widget
         if hasattr(self, 'loading_animation_widget'): # Ensure widget exists
             Animation.cancel_all(self.loading_animation_widget)
-            self.loading_animation_widget.opacity = 0
+            self.loading_animation_widget.opacity = 0 # Keep it visible as per previous subtask, but ensure it's reset if needed
+
+        if self.icon_rotation:
+            Animation.cancel_all(self.icon_rotation)
+            self.icon_rotation.angle = 0
+        self.rotation_started = False # Reset rotation flag
+
+    def _update_rotation_origin(self, instance, value):
+        if self.icon_rotation:
+            self.icon_rotation.origin = instance.center
 
     def _update_bg(self, instance, value):
         self.bg_gradient.pos = instance.pos
@@ -370,17 +393,17 @@ class StartScreen(Screen):
 
     def start_loading_animation(self):
         widget = self.loading_animation_widget
-        original_size = (dp(80), dp(80))
-        pulsed_size = (dp(90), dp(90))
+        original_size = (dp(100), dp(100))
+        pulsed_size = (dp(110), dp(110))
 
         # Initial state for each loop iteration
-        widget.pos_hint = {'center_x': -0.2, 'center_y': 0.75}
+        widget.pos_hint = {'center_x': -0.2, 'center_y': 0.7}
         widget.opacity = 0
         widget.size = original_size # Ensure original size at start
 
         # 1. Move to center, fade in. Size remains original.
         anim = Animation(
-            pos_hint={'center_x': 0.5, 'center_y': 0.75},
+            pos_hint={'center_x': 0.5, 'center_y': 0.7},
             opacity=1,
             duration=1.5,
             t='out_cubic'
@@ -394,16 +417,23 @@ class StartScreen(Screen):
         # Explicitly create a pause animation step.
         anim += Animation(duration=0.2) # This creates a 0.2 second pause
         # Then, the opacity animation without its own delay parameter.
-        anim += Animation(opacity=0, duration=1.0, t='in_cubic')
 
         # Define what happens when the sequence completes
         def reset_and_restart_animation(_animation_instance, _widget_in_animation):
             # Reset properties for the next loop
-            widget.pos_hint = {'center_x': -0.2, 'center_y': 0.75} # Reset to starting pos_hint
-            widget.opacity = 0
+            widget.pos_hint = {'center_x': -0.2, 'center_y': 0.7} # Reset to starting pos_hint
+            widget.opacity = 1
             widget.size = original_size # Reset size here
-            # Restart the animation on the widget
+
+            # Restart the pop-in/pulse animation on the widget
             anim.start(widget)
+
+            # Start continuous rotation animation only once after the first cycle of pop-in
+            if not self.rotation_started and self.icon_rotation:
+                rotation_anim = Animation(angle=360, duration=10)
+                rotation_anim.repeat = True
+                rotation_anim.start(self.icon_rotation)
+                self.rotation_started = True
 
         anim.bind(on_complete=reset_and_restart_animation)
         anim.start(widget)
@@ -514,7 +544,7 @@ class StartScreen(Screen):
         }
 
         # Schedule the actual screen transition
-        Clock.schedule_once(lambda dt: self._perform_screen_transition(game_params), 2.0)
+        Clock.schedule_once(lambda dt: self._perform_screen_transition(game_params), 1.0)
 
     def _perform_screen_transition(self, game_params):
         self.manager.current = 'game'
