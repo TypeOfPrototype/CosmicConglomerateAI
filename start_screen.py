@@ -93,7 +93,7 @@ class StartScreen(Screen):
         player_types = ["Off", "Human", "AI (Easy)"]
         default_configs = [
             {"type": "Human", "name": "Player 1", "profile_text": "<Create New Profile>"},
-            {"type": "Human", "name": "Player 2", "profile_text": "<Create New Profile>"},
+            {"type": "AI (Easy)", "name": "AI 2 (Easy)", "profile_text": "<N/A for AI>"}, # Player 2 defaults to AI
             {"type": "Off", "name": "", "profile_text": "<Create New Profile>"},
             {"type": "Off", "name": "", "profile_text": "<Create New Profile>"}
         ]
@@ -157,8 +157,8 @@ class StartScreen(Screen):
             elif player_default_type == "AI (Easy)":
                 profile_spinner.disabled = True
                 profile_spinner.text = "<N/A for AI>"
-                name_input.disabled = True
-                name_input.text = default_configs[i]["name"] # Should be like "AI X (Easy)"
+                name_input.disabled = False # AI names are editable
+                name_input.text = default_configs[i]["name"] # Pre-fill with default AI name
             else: # Human
                 name_input.disabled = default_configs[i]["profile_text"] != "<Create New Profile>"
                 profile_spinner.disabled = False
@@ -402,41 +402,36 @@ class StartScreen(Screen):
         widget.size = original_size # Ensure original size at start
 
         # 1. Move to center, fade in. Size remains original.
-        anim = Animation(
+        # This is the initial "appear" animation.
+        appear_anim = Animation(
             pos_hint={'center_x': 0.5, 'center_y': 0.7},
             opacity=1,
             duration=1.5,
             t='out_cubic'
         )
 
-        # 2. Pulse effect: Grow, then shrink.
-        anim += Animation(size=pulsed_size, duration=0.4, t='out_sine')
-        anim += Animation(size=original_size, duration=0.4, t='in_sine')
-
-        # 3. Fade out.
-        # Explicitly create a pause animation step.
-        anim += Animation(duration=0.2) # This creates a 0.2 second pause
-        # Then, the opacity animation without its own delay parameter.
-
-        # Define what happens when the sequence completes
-        def reset_and_restart_animation(_animation_instance, _widget_in_animation):
-            # Reset properties for the next loop
-            widget.pos_hint = {'center_x': -0.2, 'center_y': 0.7} # Reset to starting pos_hint
+        # Define what happens when the initial "appear" animation completes
+        def on_appear_complete(_animation_instance, _widget_in_animation):
+            # Ensure opacity is 1
             widget.opacity = 1
-            widget.size = original_size # Reset size here
+            widget.size = original_size # Ensure original size before starting pulse
 
-            # Restart the pop-in/pulse animation on the widget
-            anim.start(widget)
+            # Start the continuous pulse animation
+            pulse_anim = Animation(size=pulsed_size, duration=0.4, t='out_sine') + \
+                         Animation(size=original_size, duration=0.4, t='in_sine')
+            pulse_anim.repeat = True
+            pulse_anim.start(widget)
 
-            # Start continuous rotation animation only once after the first cycle of pop-in
+            # Start continuous rotation animation if not already started
             if not self.rotation_started and self.icon_rotation:
-                rotation_anim = Animation(angle=360, duration=10)
+                rotation_anim = Animation(angle=360, duration=10) # Rotate 360 degrees over 10 seconds
                 rotation_anim.repeat = True
                 rotation_anim.start(self.icon_rotation)
                 self.rotation_started = True
 
-        anim.bind(on_complete=reset_and_restart_animation)
-        anim.start(widget)
+        # Bind the on_complete callback to the initial "appear" animation sequence
+        appear_anim.bind(on_complete=on_appear_complete)
+        appear_anim.start(widget)
 
     def start_game(self, instance):
         player_configurations = []
