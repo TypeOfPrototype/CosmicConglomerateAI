@@ -262,7 +262,8 @@ class GameScreen(Screen):
         self.grid_size = grid_size # Ensure grid_size is assigned before using it for labels
 
         # Populate Column Labels
-        for i in range(1, self.grid_size[0] + 1):
+        # Assuming grid_size = (rows, columns), so grid_size[1] is number of columns
+        for i in range(1, self.grid_size[1] + 1):
             label = Label(
                 text=str(i),
                 size_hint=(1, 1), # Even distribution
@@ -273,7 +274,8 @@ class GameScreen(Screen):
             self.col_labels_layout.add_widget(label)
 
         # Populate Row Labels
-        for i in range(1, self.grid_size[1] + 1):
+        # Assuming grid_size = (rows, columns), so grid_size[0] is number of rows
+        for i in range(1, self.grid_size[0] + 1):
             label = Label(
                 text=str(i),
                 size_hint=(1, 1), # Even distribution
@@ -284,7 +286,7 @@ class GameScreen(Screen):
             self.row_labels_layout.add_widget(label)
 
         self.grid_layout = GridLayout(
-            cols=self.grid_size[0], rows=self.grid_size[1], spacing=1, size_hint=(0.95, 1) # Adjusted size_hint
+            cols=self.grid_size[1], rows=self.grid_size[0], spacing=1, size_hint=(0.95, 1) # Adjusted size_hint
         )
         with self.grid_layout.canvas.before:
             Color(0.2, 0.2, 0.2, 1)  # Darker grey background
@@ -301,9 +303,10 @@ class GameScreen(Screen):
         max_circles = int(total_cells * marker_percentage)
 
         # Create a list of all possible (row, col) coordinates
+        # grid_size = (rows, columns)
         all_coordinates = []
-        for r in range(self.grid_size[1]):
-            for c in range(self.grid_size[0]):
+        for r in range(self.grid_size[0]): # Iterate through rows
+            for c in range(self.grid_size[1]): # Iterate through columns
                 all_coordinates.append((r, c))
 
         # Randomly shuffle the list of all possible coordinates
@@ -313,9 +316,10 @@ class GameScreen(Screen):
         o_marker_locations_list = all_coordinates[:max_circles]
         o_marker_locations_set = set(o_marker_locations_list)
 
-        for row in range(self.grid_size[1]):
+        # grid_size = (rows, columns)
+        for row in range(self.grid_size[0]): # Iterate through rows
             button_row = []
-            for col in range(self.grid_size[0]):
+            for col in range(self.grid_size[1]): # Iterate through columns
                 if (row, col) in o_marker_locations_set:
                     # Instantiate the custom OMarkerWidget
                     btn = OMarkerWidget()
@@ -417,12 +421,13 @@ class GameScreen(Screen):
         print(f"Handling game state update with {len(updated_entries)} entries.")
         for coords, company_name in updated_entries:
             row, col = coords
-            if 0 <= row < self.grid_size[1] and 0 <= col < self.grid_size[0]:
+            # grid_size = (rows, columns)
+            if 0 <= row < self.grid_size[0] and 0 <= col < self.grid_size[1]:
                 button = self.grid_buttons[row][col]
                 self.update_grid_button(button, company_name)
                 print(f"Updated button at ({row}, {col}) to company '{company_name}'.")
             else:
-                print(f"Warning: Coordinates {coords} are out of bounds.")
+                print(f"Warning: Coordinates {coords} are out of bounds for grid_size {self.grid_size}.")
 
     def verify_images(self):
         for name, path in self.game_state.company_logos.items():
@@ -661,27 +666,37 @@ class GameScreen(Screen):
 
         self.info_label.text = action_message # Display AI action
 
-        # Visual Update for AI's move (specifically for diamonds, as company updates are handled by callback)
+        # Visual Update for AI's move AND Animation
         if selected_cell is not None and \
-           0 <= selected_cell[0] < self.grid_size[1] and \
-           0 <= selected_cell[1] < self.grid_size[0]:
+           0 <= selected_cell[0] < self.grid_size[0] and \
+           0 <= selected_cell[1] < self.grid_size[1]:
             
-            # If it's not a company tile after AI's move, then it might be a diamond
-            # Company tiles are updated by the callback handle_game_state_update.
+            button_to_animate = self.grid_buttons[selected_cell[0]][selected_cell[1]]
+
+            # If it's not a company tile after AI's move, then it might be a diamond.
+            # Company tiles visuals are updated by the callback handle_game_state_update.
+            # Diamond visuals are handled here.
             if selected_cell not in self.game_state.company_map: 
-                button = self.grid_buttons[selected_cell[0]][selected_cell[1]]
-                if os.path.exists(self.game_state.diamond_image_path):
-                    button.source = self.game_state.diamond_image_path
-                    button.reload()
-                else:
-                    button.text = "◆"
-                    button.font_size = 24
-                button.color = [1, 1, 1, 1]
-                print(f"AI Debug: Updated button {selected_cell} for diamond after AI turn.")
-            # If it IS in company_map, the callback will handle it.
+                # This is the existing diamond visual update logic
+                if isinstance(button_to_animate, ImageButton): # Check if it's an ImageButton
+                    if os.path.exists(self.game_state.diamond_image_path):
+                        button_to_animate.source = self.game_state.diamond_image_path
+                        button_to_animate.reload()
+                    else:
+                        button_to_animate.text = "◆"
+                        button_to_animate.font_size = 24
+                    button_to_animate.color = [1, 1, 1, 1]
+                    print(f"AI Debug: Updated button {selected_cell} for diamond after AI turn.")
+                # If it's an OMarkerWidget, it cannot become a diamond. No visual update needed here for it.
+
+            # Perform flip animation for the AI's chosen cell if it's an ImageButton
+            # This will animate the button whether it became a company (updated by callback) or a diamond (updated above).
+            if isinstance(button_to_animate, ImageButton):
+                 self.perform_flip_animation(button_to_animate)
+            # OMarkerWidget instances do not have perform_flip_animation and should not be selected by AI.
 
         elif selected_cell is not None: # selected_cell was not None, but was out of bounds
-            print(f"AI Error: selected_cell {selected_cell} is out of bounds for the grid. Rows: {self.grid_size[1]}, Cols: {self.grid_size[0]}")
+            print(f"AI Error: selected_cell {selected_cell} is out of bounds for the grid. Rows: {self.grid_size[0]}, Cols: {self.grid_size[1]}")
             # info_label is already set by action_message.
             
         # If selected_cell is None, info_label already has a message like "no available moves".
@@ -967,8 +982,8 @@ class GameScreen(Screen):
         """
         empty_squares = [
             (r, c)
-            for r in range(self.grid_size[1])
-            for c in range(self.grid_size[0])
+            for r in range(self.grid_size[0]) # Iterate through rows
+            for c in range(self.grid_size[1]) # Iterate through columns
             if isinstance(self.grid_buttons[r][c], ImageButton) and self.grid_buttons[r][c].source == ''
         ]
         if not empty_squares:
