@@ -24,6 +24,7 @@ from kivy.graphics.shader import Shader
 from kivy.uix.effectwidget import EffectWidget
 import os # Already imported, ensure it's available where needed
 from functools import partial # Add this to imports in game_screen.py
+from kivy.graphics import InstructionGroup # Make sure this import is at the top of the file
 
 from custom_widgets import ImageButton
 from game_logic import GameState
@@ -323,8 +324,14 @@ class GameScreen(Screen):
         # This part remains the same:
         self.effect_widget = EffectWidget()
         if self.shader: # This check is now more meaningful
-            self.effect_widget.effects = [self.shader]
-            print("CRT Shader assigned to EffectWidget.")
+            shader_container = InstructionGroup()
+            shader_container.add(self.shader)
+            # Add a default texture binding for texture0, which the shader expects.
+            # EffectWidget provides its FBO output as texture0 to the shader.
+            # We typically don't need to add a Rectangle here if EffectWidget handles it.
+            # The shader in EffectWidget operates on the FBO's texture.
+            self.effect_widget.effects = [shader_container]
+            print("Compiled shader wrapped in InstructionGroup and assigned to EffectWidget.effects.")
         else:
             print("CRT Shader not available, EffectWidget will have no custom effects.")
 
