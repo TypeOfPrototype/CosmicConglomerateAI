@@ -1477,5 +1477,3 @@ class GameScreen(Screen):
         anim = Animation(size_hint_x=0, opacity=0, duration=0.3)
         anim.bind(on_complete=self._trigger_grid_layout_update)
         anim.start(self.sidebar_layout)
-
-[end of game_screen.py]
