@@ -221,8 +221,32 @@ class GameScreen(Screen):
         # To center, we'd need to add a wrapper BoxLayout or adjust padding/positioning.
         # This might be an overreach for the current problem, but good to note.
 
+        # Center the content within self.grid_plus_labels_container
+        # self.grid_plus_labels_container is a BoxLayout with orientation='vertical'.
+        # Its children are self.col_labels_and_spacer_row and self.grid_and_row_labels_row.
+
+        # Width of the content. Both children rows should have the same width.
+        # This was calculated as: self.col_labels_and_spacer_row.size = (row_label_width + actual_grid_width, col_label_height)
+        content_width = self.col_labels_and_spacer_row.width
+
+        # Height of the content
+        content_height = self.col_labels_and_spacer_row.height + self.grid_and_row_labels_row.height
+
+        container_width = self.grid_plus_labels_container.width
+        container_height = self.grid_plus_labels_container.height
+
+        padding_x = (container_width - content_width) / 2
+        padding_y = (container_height - content_height) / 2
+
+        # Ensure padding is not negative (can happen if content somehow exceeds container, though unlikely with current logic)
+        padding_x = max(0, padding_x)
+        padding_y = max(0, padding_y)
+
+        self.grid_plus_labels_container.padding = [padding_x, padding_y, padding_x, padding_y]
+
         print(f"update_game_board_layout: available=({available_width},{available_height}), grid=({actual_grid_width},{actual_grid_height}), cell_edge={cell_edge}")
         print(f"Row Labels: {self.row_labels_layout.size}, Col Labels: {self.col_labels_layout.size}, Corner: {self.corner_spacer.size}")
+        # print(f"grid_plus_labels_container padding: {[padding_x, padding_y, padding_x, padding_y]}")
 
     def __init__(self, **kwargs):
         super(GameScreen, self).__init__(**kwargs)
