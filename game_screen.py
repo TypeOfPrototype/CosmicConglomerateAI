@@ -20,12 +20,12 @@ from kivy.graphics import Color, Rectangle, Ellipse # Added Ellipse
 from kivy.clock import Clock
 from kivy.animation import Animation
 from kivy.app import App # Added import
-from kivy.graphics.shader import Shader
+from kivy.graphics.shader import Shader # For CrtEffect and GameScreen's self.shader
 from kivy.uix.effectwidget import EffectWidget
 import os # Already imported, ensure it's available where needed
 from functools import partial # Add this to imports in game_screen.py
 from kivy.graphics.instructions import InstructionGroup # Corrected import path for CrtEffect
-# Shader is already imported globally as: from kivy.graphics.shader import Shader
+
 
 from custom_widgets import ImageButton
 from game_logic import GameState
@@ -80,32 +80,23 @@ def _split_shader_source(source_string):
 class CrtEffect(InstructionGroup):
     def __init__(self, vs_code=None, fs_code=None, **kwargs):
         super().__init__(**kwargs)
-        self.shader = None
+        self.shader = None # This will hold the compiled Kivy Shader object
         self.success = False
-        self.vs_log = ""
-        self.fs_log = ""
+        self.vs_log = "" # Renamed from vs_log_str for consistency
+        self.fs_log = "" # Renamed from fs_log_str for consistency
 
         if vs_code and fs_code:
             try:
-                # Ensure Kivy's Shader is used from kivy.graphics.shader
                 temp_shader = Shader(vs=vs_code, fs=fs_code)
-                # Accessing shader.success immediately after creation is correct.
                 self.success = temp_shader.success
 
                 if self.success:
                     self.shader = temp_shader
-                    self.add(self.shader) # Add the compiled shader to this InstructionGroup
+                    self.add(self.shader)
                 else:
-                    # Use getattr for safety, though these attributes should exist on Shader instances
-                    # Kivy Shader objects store logs in vs_log and fs_log properties directly after compilation attempt
                     if hasattr(temp_shader, 'vs_log'): self.vs_log = temp_shader.vs_log
                     if hasattr(temp_shader, 'fs_log'): self.fs_log = temp_shader.fs_log
-                    # Fallback if direct properties are empty or not present (though less likely for modern Kivy)
                     if not self.vs_log and not self.fs_log and hasattr(temp_shader, 'get_shader_log'):
-                         # This might get both logs combined, or specific if type argument was used,
-                         # but Kivy's Shader.get_shader_log() does not take an argument.
-                         # The vs_log and fs_log properties are the correct modern way.
-                         # For robustness, let's just indicate general failure if specific logs aren't found.
                          combined_log = temp_shader.get_shader_log()
                          if combined_log:
                              self.vs_log = "Combined log: " + combined_log
@@ -113,12 +104,9 @@ class CrtEffect(InstructionGroup):
                          else:
                              self.vs_log = "vs_log not available"
                              self.fs_log = "fs_log not available"
-
                     print(f"CrtEffect: Shader compilation failed. VS Log: {self.vs_log}, FS Log: {self.fs_log}")
-
             except Exception as e:
                 self.success = False
-                # Ensure logs are strings
                 error_message = f"Exception during CrtEffect shader compilation: {str(e)}"
                 self.fs_log = error_message
                 self.vs_log = error_message
@@ -142,239 +130,111 @@ class OMarkerWidget(Widget):
         with self.canvas:
             self.ellipse_color_instruction = Color(0, 0.4, 0.6, 1)  # Initial Blue-Teal color
             self.ellipse_instruction = Ellipse(
-                # Initial pos/size will be updated by _update_ellipse_visuals
-                # Set to small initial values to avoid visual glitch if not updated immediately
                 pos=(self.center_x - 5, self.center_y - 5),
                 size=(10, 10)
             )
-
-        # Bind properties to the update method
         self.bind(pos=self._update_ellipse_visuals,
                   size=self._update_ellipse_visuals,
                   ellipse_current_scale=self._update_ellipse_visuals)
-
-        # Call once to set initial visuals based on actual size and scale
-        # This might be better called via Clock.schedule_once to ensure layout has occurred
-        # For now, direct call assuming initial properties are somewhat valid or will be updated.
         self._update_ellipse_visuals()
 
-
     def _update_ellipse_visuals(self, instance=None, value=None):
-        # This method updates the ellipse based on the widget's properties
         scale = self.ellipse_current_scale
-
-        # Calculate position and size for the ellipse to be centered
         ellipse_width = self.width * scale
         ellipse_height = self.height * scale
-
         self.ellipse_instruction.pos = (self.center_x - ellipse_width / 2,
                                         self.center_y - ellipse_height / 2)
         self.ellipse_instruction.size = (ellipse_width, ellipse_height)
 
     def start_animations(self):
-        # Color Animation (shifting RGBA for color and opacity)
         color_anim = (Animation(rgba=(0.1, 0.5, 0.7, 0.7), duration=2.0, t='in_out_sine') +
                       Animation(rgba=(0, 0.4, 0.6, 1.0), duration=2.0, t='in_out_sine'))
         color_anim.repeat = True
         color_anim.start(self.ellipse_color_instruction)
-
-        # Size Animation for ellipse_current_scale
-        # Kivy's property system will automatically trigger _update_ellipse_visuals
         size_pulse_anim = (Animation(ellipse_current_scale=0.9, duration=1.5, t='in_out_sine') +
                          Animation(ellipse_current_scale=0.7, duration=1.5, t='in_out_sine'))
         size_pulse_anim.repeat = True
-        size_pulse_anim.start(self) # Start on self (the OMarkerWidget instance)
+        size_pulse_anim.start(self)
 
 
 class GameScreen(Screen):
     def update_game_board_layout(self, instance, value):
-        # instance is the widget whose size change triggered this, e.g., self.grid_plus_labels_container
-        # value is its new size (width, height)
-
         available_width = value[0]
         available_height = value[1]
-
         if not hasattr(self, 'grid_size') or not self.grid_size or not hasattr(self, 'grid_layout'):
             print("Warning: Game board components not ready for layout update.")
             return
-
         num_rows = self.grid_size[0]
         num_cols = self.grid_size[1]
-
-        if num_rows == 0 or num_cols == 0:
-            return
-
-        # Define proportions for labels vs grid (these are initial size_hints)
-        # These might need to be fixed values if size_hints are removed from children
+        if num_rows == 0 or num_cols == 0: return
         row_labels_width_proportion = 0.05
         col_labels_height_proportion = 0.05
-        # grid_layout_width_proportion = 0.95 (of remaining after row_labels)
-        # grid_layout_height_proportion = 0.95 (of remaining after col_labels)
-
-        # Calculate space available for the main grid (self.grid_layout)
-        # This needs to account for the space the labels will take.
-        # This is tricky because label sizes depend on grid size and vice-versa if we want alignment.
-
-        # Let's determine cell_edge based on the total available space for the grid AND its labels.
-        # The grid itself is in grid_and_row_labels_row (takes X% of width, 95% of height of grid_plus_labels_container)
-        # And col_labels_and_spacer_row (takes X% of width, 5% of height of grid_plus_labels_container)
-
-        # Effective space for the interactive grid area (grid_layout + row_labels + col_labels + corner_spacer)
-        # This is essentially the full space of self.grid_plus_labels_container
-
         spacing_x, spacing_y = self.grid_layout.spacing if isinstance(self.grid_layout.spacing, (list, tuple)) else (self.grid_layout.spacing, self.grid_layout.spacing)
-
-        # Calculate potential cell_edge if row/col labels had zero size:
-        # This is the available space for the *grid cells area* within grid_plus_labels_container
-        # grid_plus_labels_container contains:
-        #   col_labels_and_spacer_row (height: 5% of available_height)
-        #   grid_and_row_labels_row (height: 95% of available_height)
-
-        # Space for (grid + row_labels):
-        # Use the original size_hint_y proportion (0.95 for grid_and_row_labels_row)
-        space_for_grid_and_row_labels_h = available_height * 0.95
-        # Space for (col_labels + corner_spacer):
-        # Use the original size_hint_y proportion (0.05 for col_labels_and_spacer_row)
-        space_for_col_labels_and_spacer_h = available_height * 0.05
-
-        # Within grid_and_row_labels_row (width: 100% of available_width):
-        #   row_labels_layout (width: 5% of its parent's width)
-        #   grid_layout (width: 95% of its parent's width)
-
-        # Let's simplify: assume fixed pixel sizes for labels for a moment, or calculate cell_edge first.
-        # The most constrained dimension will determine cell_edge.
-        # Width available for num_cols cells and (num_cols-1) spacings, AND row_labels_width:
-        #   available_width = (num_cols * cell_edge + (num_cols-1)*spacing_x) + row_label_width
-        # Height available for num_rows cells and (num_rows-1) spacings, AND col_labels_height:
-        #   available_height = (num_rows * cell_edge + (num_rows-1)*spacing_y) + col_label_height
-
-        # Estimate typical label sizes (e.g., based on font size or a fixed value)
-        # For now, let's use their original size_hint proportions to estimate their impact.
         estimated_row_labels_width = available_width * row_labels_width_proportion
         estimated_col_labels_height = available_height * col_labels_height_proportion
-
         width_for_grid_cells = available_width - estimated_row_labels_width
         height_for_grid_cells = available_height - estimated_col_labels_height
-
         cell_edge_w = (width_for_grid_cells - (num_cols - 1) * spacing_x) / num_cols
         cell_edge_h = (height_for_grid_cells - (num_rows - 1) * spacing_y) / num_rows
         cell_edge = min(cell_edge_w, cell_edge_h)
-
-        if cell_edge <= 1: cell_edge = 1 # Ensure positive
-
-        # --- Now, set sizes based on this cell_edge ---
-
-        # 1. Size the grid cells (children of self.grid_layout)
+        if cell_edge <= 1: cell_edge = 1
         for child in self.grid_layout.children:
             child.size_hint = (None, None)
             child.size = (cell_edge, cell_edge)
-
-        # 2. Calculate actual grid_layout size and set it
         actual_grid_width = num_cols * cell_edge + (num_cols - 1) * spacing_x
         actual_grid_height = num_rows * cell_edge + (num_rows - 1) * spacing_y
         self.grid_layout.size_hint = (None, None)
         self.grid_layout.size = (actual_grid_width, actual_grid_height)
-
-        # 3. Size the label layouts
-        # Use a fixed reasonable size for labels for now, or make them adapt to font.
-        # Let's make them fit the grid.
-        # self.col_labels_layout was size_hint=(0.95, 1) relative to col_labels_and_spacer_row
-        # self.row_labels_layout was size_hint=(0.05, 1) relative to grid_and_row_labels_row
-
-        # Set size_hints to None to manually control size
         self.col_labels_layout.size_hint = (None, None)
         self.row_labels_layout.size_hint = (None, None)
         self.corner_spacer.size_hint = (None, None)
-
-        # Define a practical minimum/default size for labels if grid is too small
         min_label_width = 30
         min_label_height = 20
-
-        # Column labels (numbers 1 to N for columns)
-        # Their height should be consistent. Width should match grid.
-        col_label_height = max(min_label_height, estimated_col_labels_height) # Or a fixed value like 30
+        col_label_height = max(min_label_height, estimated_col_labels_height)
         self.col_labels_layout.size = (actual_grid_width, col_label_height)
-        for label in self.col_labels_layout.children: # These are labels for col numbers
+        for label in self.col_labels_layout.children:
             label.size_hint_x = None
-            label.width = cell_edge # Make each col number label take cell_edge width
-            label.text_size = (label.width, None) # For text alignment
-
-        # Row labels (numbers 1 to N for rows)
-        # Their width should be consistent. Height should match grid.
-        row_label_width = max(min_label_width, estimated_row_labels_width) # Or a fixed value like 30
+            label.width = cell_edge
+            label.text_size = (label.width, None)
+        row_label_width = max(min_label_width, estimated_row_labels_width)
         self.row_labels_layout.size = (row_label_width, actual_grid_height)
-        for label in self.row_labels_layout.children: # These are labels for row numbers
+        for label in self.row_labels_layout.children:
             label.size_hint_y = None
-            label.height = cell_edge # Make each row number label take cell_edge height
-            label.text_size = (label.width, None) # For text alignment (use label.width for wrapping if text were long)
-
-
-        # 4. Size the corner spacer
+            label.height = cell_edge
+            label.text_size = (label.width, None)
         self.corner_spacer.size = (row_label_width, col_label_height)
-
-        # 5. Adjust parent container sizes if necessary.
-        # self.col_labels_and_spacer_row contains corner_spacer and col_labels_layout
         self.col_labels_and_spacer_row.size_hint = (None, None)
         self.col_labels_and_spacer_row.size = (row_label_width + actual_grid_width, col_label_height)
-
-        # self.grid_and_row_labels_row contains row_labels_layout and grid_layout
         self.grid_and_row_labels_row.size_hint = (None, None)
         self.grid_and_row_labels_row.size = (row_label_width + actual_grid_width, actual_grid_height)
-
-        # self.grid_plus_labels_container contains col_labels_and_spacer_row and grid_and_row_labels_row
-        # This is the container whose size change should trigger this whole method.
-        # We can either let it keep its size_hint and center its children, or make it wrap them.
-        # For now, let it keep its size_hint and the content will be top-left aligned by default.
-        # To center, we'd need to add a wrapper BoxLayout or adjust padding/positioning.
-        # This might be an overreach for the current problem, but good to note.
-
-        # Center the content within self.grid_plus_labels_container
-        # self.grid_plus_labels_container is a BoxLayout with orientation='vertical'.
-        # Its children are self.col_labels_and_spacer_row and self.grid_and_row_labels_row.
-
-        # Width of the content. Both children rows should have the same width.
-        # This was calculated as: self.col_labels_and_spacer_row.size = (row_label_width + actual_grid_width, col_label_height)
         content_width = self.col_labels_and_spacer_row.width
-
-        # Height of the content
         content_height = self.col_labels_and_spacer_row.height + self.grid_and_row_labels_row.height
-
         container_width = self.grid_plus_labels_container.width
         container_height = self.grid_plus_labels_container.height
-
         padding_x = (container_width - content_width) / 2
         padding_y = (container_height - content_height) / 2
-
-        # Ensure padding is not negative (can happen if content somehow exceeds container, though unlikely with current logic)
         padding_x = max(0, padding_x)
         padding_y = max(0, padding_y)
-
         self.grid_plus_labels_container.padding = [padding_x, padding_y, padding_x, padding_y]
-
         print(f"update_game_board_layout: available=({available_width},{available_height}), grid=({actual_grid_width},{actual_grid_height}), cell_edge={cell_edge}")
         print(f"Row Labels: {self.row_labels_layout.size}, Col Labels: {self.col_labels_layout.size}, Corner: {self.corner_spacer.size}")
-        # print(f"grid_plus_labels_container padding: {[padding_x, padding_y, padding_x, padding_y]}")
 
     def __init__(self, **kwargs):
         super(GameScreen, self).__init__(**kwargs)
         self.main_layout = BoxLayout(orientation='horizontal')
-        # self.add_widget(self.main_layout) # REMOVED - This was causing the issue
 
-        # Initialize sidebar visibility and original width
         self.sidebar_visible = False
         self.sidebar_original_width_hint = 0.3
-
-        # Initialize properties for blinking
         self.blink_event = None
         self.blinking_buttons = []
         self.blinking_animations = []
 
-        # CRT Shader related initializations
-        self.shader = None # Initialize self.shader, used for uniform access
-        self.crt_effect_instance = None # Optional: store the effect instance
-        # self._temp_fs_code and self._temp_vs_code are removed
+        # CRT Shader V3: Using CrtEffect class
+        self.shader = None
+        self.crt_effect_instance = None
         self.crt_shader_path = os.path.join('assets', 'crt_shader.glsl')
-        self.effect_widget = None
+        self.effect_widget = EffectWidget() # Create EffectWidget instance first
+         # Initialize effect parameters
         self.crt_effect_on = 1.0
         self.crt_scanline_intensity = 0.5
         self.crt_curvature_amount = 0.05
@@ -382,15 +242,12 @@ class GameScreen(Screen):
         self.crt_chromatic_aberration_amount = 0.5
         self.crt_noise_amount = 0.05
 
-        self.effect_widget = EffectWidget()
-        # self.add_widget(self.effect_widget) # Moved after shader setup attempt
-
         shader_file_path = self.crt_shader_path
         print(f"Attempting to load CRT shader from: {os.path.abspath(shader_file_path)}")
 
         if not os.path.exists(shader_file_path):
             print(f"--- ERROR: CRT Shader file NOT FOUND at: {os.path.abspath(shader_file_path)} ---")
-            self.shader = None
+            # self.shader remains None
         else:
             try:
                 with open(shader_file_path, 'r') as f:
@@ -405,7 +262,7 @@ class GameScreen(Screen):
                         self.effect_widget.effects = [self.crt_effect_instance]
                         self.shader = self.crt_effect_instance.shader
                         print("--- SUCCESS: CrtEffect created, shader compiled, and assigned to EffectWidget. ---")
-                        self.setup_crt_shader()
+                        self.setup_crt_shader() # Call to initialize uniforms
                     else:
                         print(f"--- ERROR: CrtEffect shader compilation failed. ---")
                         if hasattr(self.crt_effect_instance, 'vs_log') and self.crt_effect_instance.vs_log:
@@ -420,78 +277,25 @@ class GameScreen(Screen):
                 print(f"--- EXCEPTION during CrtEffect creation or shader file processing: {e} ---")
                 self.shader = None
 
-        self.add_widget(self.effect_widget)
+        self.add_widget(self.effect_widget) # Add effect_widget to GameScreen AFTER setup attempt
         Window.bind(on_resize=self.on_window_resize)
 
-    # def setup_fbo_shader(self, dt=None): # METHOD REMOVED
-    #     if not hasattr(self, '_temp_fs_code') or not self._temp_fs_code or \
-    #        not hasattr(self, '_temp_vs_code') or not self._temp_vs_code:
-    #         print("--- ERROR: Shader code (fs/vs) not found on self for setup_fbo_shader. Aborting shader setup. ---")
-    #         return
-
-    #     if self.effect_widget.fbo:
-    #         try:
-    #             print(f"--- Assigning shader strings to FBO. Current FBO: {self.effect_widget.fbo} ---")
-    #             # These assignments trigger internal compilation by the FBO (RenderContext)
-    #             self.effect_widget.fbo.fs = self._temp_fs_code
-    #             self.effect_widget.fbo.vs = self._temp_vs_code
-
-    #             # Get the FBO's internal compiled shader object
-    #             internal_fbo_shader = self.effect_widget.fbo.shader
-
-    #             if internal_fbo_shader and hasattr(internal_fbo_shader, 'success') and internal_fbo_shader.success:
-    #                 self.shader = internal_fbo_shader # Assign the valid, compiled shader to self.shader
-    #                 print(f"--- SUCCESS: FBO's internal shader compiled and assigned. Shader object: {self.shader} ---")
-    #                 self.setup_crt_shader() # Initialize uniforms on the valid shader
-    #             else:
-    #                 print(f"--- ERROR: FBO's internal shader failed to compile or is invalid. ---")
-    #                 if internal_fbo_shader: # Check if internal_fbo_shader is not None before accessing logs
-    #                     if hasattr(internal_fbo_shader, 'vs_log'):
-    #                         print("FBO Internal Vertex Shader Log:\n", internal_fbo_shader.vs_log)
-    #                     else:
-    #                         print("FBO Internal Vertex Shader Log: Not available.")
-    #                     if hasattr(internal_fbo_shader, 'fs_log'):
-    #                         print("FBO Internal Fragment Shader Log:\n", internal_fbo_shader.fs_log)
-    #                     else:
-    #                         print("FBO Internal Fragment Shader Log: Not available.")
-    #                     if not hasattr(internal_fbo_shader, 'success'):
-    #                         print("FBO Internal Shader 'success' attribute missing.")
-    #                     elif not internal_fbo_shader.success:
-    #                          print("FBO Internal Shader 'success' attribute is False.")
-    #                 else:
-    #                     print("FBO Internal Shader object (self.effect_widget.fbo.shader) is None after fs/vs assignment.")
-
-    #                 self.shader = None # Ensure self.shader is None if setup failed
-
-    #         except Exception as e:
-    #             print(f"--- EXCEPTION during FBO shader fs/vs assignment or internal shader retrieval: {e} ---")
-    #             self.shader = None # Ensure self.shader is None on error
-    #     else:
-    #         # ... (rescheduling logic remains the same) ...
-    #         print("--- ERROR: EffectWidget FBO not available for shader assignment. Retrying... ---")
-    #         Clock.schedule_once(self.setup_fbo_shader, 0.1)
-
+    # setup_fbo_shader method is removed.
 
     def initialize_game(self, player_configurations, grid_size, game_turn_length, marker_percentage=0.1): # player_names -> player_configurations
-        # self.main_layout is now a child of self.effect_widget
         self.main_layout.clear_widgets()
-        if self.effect_widget not in self.main_layout.children: # Ensure it's only added if not already present (defensive)
-            if self.main_layout.parent: # If main_layout somehow still has a parent, remove it
+        if self.effect_widget not in self.main_layout.children:
+            if self.main_layout.parent:
                 self.main_layout.parent.remove_widget(self.main_layout)
-            self.effect_widget.add_widget(self.main_layout) # Add main_layout to effect_widget
+            self.effect_widget.add_widget(self.main_layout)
 
         self.o_marker_buttons = []
-
-        # Initialize ProfileManager and player profile objects
         self.profile_manager = ProfileManager()
-        # player_profile_objects will be keyed by player_game_name (display name)
         self.player_profile_objects = {}
-
         for p_config in player_configurations:
-            profile_username = p_config['profile_username'] # This can be None for AI
-            player_game_name = p_config['name'] # This is the display name, e.g., "HumanPlayer1" or "AI 1 (Easy)"
-
-            if profile_username is not None: # Human player
+            profile_username = p_config['profile_username']
+            player_game_name = p_config['name']
+            if profile_username is not None:
                 is_new = p_config.get('is_new_profile', False)
                 profile = None
                 if is_new:
@@ -501,36 +305,26 @@ class GameScreen(Screen):
                     except ValueError as e:
                         print(f"GameScreen Error creating new profile '{profile_username}': {e}. Trying to get existing.")
                         profile = self.profile_manager.get_profile(profile_username)
-                        if not profile: # Fallback to temp UserProfile
+                        if not profile:
                             profile = UserProfile(profile_username)
-                else: # Existing human profile
+                else:
                     profile = self.profile_manager.get_profile(profile_username)
                     if not profile:
                         print(f"GameScreen Error: Existing profile '{profile_username}' not found. Creating fallback.")
-                        try: # Attempt to create it if it was supposed to exist but doesn't
+                        try:
                             profile = self.profile_manager.create_profile(profile_username)
-                        except ValueError: # If it somehow exists after all (e.g. race condition)
+                        except ValueError:
                             profile = self.profile_manager.get_profile(profile_username)
-                            if not profile: # Absolute fallback
+                            if not profile:
                                 profile = UserProfile(profile_username)
-
-                # Store the UserProfile object (or a temporary one) against the player's game name
-                self.player_profile_objects[player_game_name] = profile if profile else UserProfile(profile_username) # Ensure a profile object is stored
-
-            else: # AI Player (profile_username is None)
-                self.player_profile_objects[player_game_name] = None # Explicitly store None for AI players
+                self.player_profile_objects[player_game_name] = profile if profile else UserProfile(profile_username)
+            else:
+                self.player_profile_objects[player_game_name] = None
                 print(f"GameScreen: Setting up AI player {player_game_name} with no profile object.")
-
-        # Initialize GameState
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        # GameState __init__ will now use 'name' for its primary player list.
         self.game_state = GameState(player_configurations, grid_size, script_dir)
-        self.game_turn_length = game_turn_length  # Game turn length set by player
-
-        # **Register the callback to handle GameState updates**
+        self.game_turn_length = game_turn_length
         self.game_state.register_callback(self.handle_game_state_update)
-
-        # Sidebar for player information
         self.sidebar_layout = BoxLayout(
             orientation='vertical',
             size_hint=(0, 1),
@@ -539,15 +333,14 @@ class GameScreen(Screen):
         )
         self.sidebar_layout.opacity = 0
         with self.sidebar_layout.canvas.before:
-            Color(0, 0, 0, 1)  # Black background
+            Color(0, 0, 0, 1)
             self.sidebar_rect = Rectangle(pos=self.sidebar_layout.pos, size=self.sidebar_layout.size)
         self.sidebar_layout.bind(
             pos=lambda instance, value: setattr(self.sidebar_rect, 'pos', value),
             size=lambda instance, value: setattr(self.sidebar_rect, 'size', value)
         )
-
         self.current_player_label = Label(
-            text=f"[b]Current Player:[/b] {self.game_state.players[0]}", # Use game_state.players
+            text=f"[b]Current Player:[/b] {self.game_state.players[0]}",
             size_hint=(1, 0.1),
             markup=True,
             font_size=Window.height * 0.02,
@@ -559,8 +352,6 @@ class GameScreen(Screen):
             font_size=Window.height * 0.018,
             color=(1, 1, 1, 1)
         )
-
-        # New Holdings Display Structure
         self.holdings_title_label = Label(
             text="[b]Holdings:[/b]",
             markup=True,
@@ -570,211 +361,111 @@ class GameScreen(Screen):
         )
         self.holdings_display_container = BoxLayout(
             orientation='vertical',
-            size_hint=(1, 0.3), # Takes full width of sidebar_layout
-            spacing=5 # spacing between each holding row
+            size_hint=(1, 0.3),
+            spacing=5
         )
-        self.total_wealth_label = Label( # Repurposed from old player_holdings_label concept
+        self.total_wealth_label = Label(
             text="Total Wealth: £0",
             size_hint=(1, 0.05),
             font_size=Window.height * 0.018,
             color=(1,1,1,1)
         )
-        # self.company_info_label is removed as per instructions
-        self.sidebar_spacer = Label(size_hint=(1, 0.4)) # Corrected size_hint_y to make sum 1.0
-        
+        self.sidebar_spacer = Label(size_hint=(1, 0.4))
         self.settings_button = Button(
             text="Settings",
             size_hint=(1, 0.1),
-            font_size=Window.height * 0.018 # Match other sidebar elements
+            font_size=Window.height * 0.018
         )
         self.settings_button.bind(on_press=self.open_settings_popup)
-
-        # Clear existing widgets from sidebar_layout before adding new ones in correct order
         self.sidebar_layout.clear_widgets() 
-        
-        # Add widgets in the specified order
-        self.sidebar_layout.add_widget(self.current_player_label)       # size_hint_y: 0.1
-        self.sidebar_layout.add_widget(self.player_money_label)        # size_hint_y: 0.1
-        self.sidebar_layout.add_widget(self.holdings_title_label)      # size_hint_y: 0.05
-        self.sidebar_layout.add_widget(self.holdings_display_container) # size_hint_y: 0.3
-        self.sidebar_layout.add_widget(self.total_wealth_label)        # size_hint_y: 0.05
-        # self.company_info_label is removed from layout
-        self.sidebar_layout.add_widget(self.sidebar_spacer)            # size_hint_y: 0.4 (corrected)
-        self.sidebar_layout.add_widget(self.settings_button)           # size_hint_y: 0.1
-                                                                        # New Total: 0.1+0.1+0.05+0.3+0.05+0.4+0.1 = 1.0
-
+        self.sidebar_layout.add_widget(self.current_player_label)
+        self.sidebar_layout.add_widget(self.player_money_label)
+        self.sidebar_layout.add_widget(self.holdings_title_label)
+        self.sidebar_layout.add_widget(self.holdings_display_container)
+        self.sidebar_layout.add_widget(self.total_wealth_label)
+        self.sidebar_layout.add_widget(self.sidebar_spacer)
+        self.sidebar_layout.add_widget(self.settings_button)
         self.main_layout.add_widget(self.sidebar_layout)
-
-        # Game board layout
         self.game_layout = BoxLayout(
             orientation='vertical', size_hint=(1.0, 1), padding=10, spacing=10
         )
-
-        # Info label to display player actions
         self.info_label = Label(
-            text=f"Welcome to Space Monopoly! {self.game_state.players[0]}'s Turn", # Use game_state.players
+            text=f"Welcome to Space Monopoly! {self.game_state.players[0]}'s Turn",
             size_hint=(1, 0.05),
             font_size=16,
             color=(1, 1, 1, 1)
         )
         self.game_layout.add_widget(self.info_label)
-
-        # Container for grid + labels
         self.grid_plus_labels_container = BoxLayout(orientation='vertical', size_hint=(1, 0.85))
-
-        # Row for column labels and top-left spacer
         self.col_labels_and_spacer_row = BoxLayout(orientation='horizontal', size_hint=(1, 0.05))
-
-        # Top-left corner spacer
         self.corner_spacer = Widget(size_hint=(0.05, 1))
-        self.col_labels_and_spacer_row.add_widget(self.corner_spacer) # Correction already applied in previous step, this is fine.
-
-        # Column labels layout
+        self.col_labels_and_spacer_row.add_widget(self.corner_spacer)
         self.col_labels_layout = BoxLayout(orientation='horizontal', size_hint=(0.95, 1))
-        self.col_labels_and_spacer_row.add_widget(self.col_labels_layout) # Correction already applied in previous step, this is fine.
-
-        self.grid_plus_labels_container.add_widget(self.col_labels_and_spacer_row) # Correction already applied in previous step, this is fine.
-
-        # Row for the main grid and row labels
+        self.col_labels_and_spacer_row.add_widget(self.col_labels_layout)
+        self.grid_plus_labels_container.add_widget(self.col_labels_and_spacer_row)
         self.grid_and_row_labels_row = BoxLayout(orientation='horizontal', size_hint=(1, 0.95))
-
-        # Row labels layout
         self.row_labels_layout = BoxLayout(orientation='vertical', size_hint=(0.05, 1))
-        self.grid_and_row_labels_row.add_widget(self.row_labels_layout) # This line was already correct.
-
-        # Grid layout for the game board
-        self.grid_size = grid_size # Ensure grid_size is assigned before using it for labels
-
-        # Populate Column Labels
-        # Assuming grid_size = (rows, columns), so grid_size[1] is number of columns
+        self.grid_and_row_labels_row.add_widget(self.row_labels_layout)
+        self.grid_size = grid_size
         for i in range(1, self.grid_size[1] + 1):
-            label = Label(
-                text=str(i),
-                size_hint=(1, 1), # Even distribution
-                halign='center',
-                valign='middle',
-                font_size=Window.height * 0.015
-            )
+            label = Label(text=str(i), size_hint=(1, 1), halign='center', valign='middle', font_size=Window.height * 0.015)
             self.col_labels_layout.add_widget(label)
-
-        # Populate Row Labels
-        # Assuming grid_size = (rows, columns), so grid_size[0] is number of rows
         for i in range(1, self.grid_size[0] + 1):
-            label = Label(
-                text=str(i),
-                size_hint=(1, 1), # Even distribution
-                halign='center',
-                valign='middle',
-                font_size=Window.height * 0.015
-            )
+            label = Label(text=str(i), size_hint=(1, 1), halign='center', valign='middle', font_size=Window.height * 0.015)
             self.row_labels_layout.add_widget(label)
-
         self.grid_layout = GridLayout(
-            cols=self.grid_size[1], rows=self.grid_size[0], spacing=1, size_hint=(0.95, 1) # Adjusted size_hint
+            cols=self.grid_size[1], rows=self.grid_size[0], spacing=1, size_hint=(0.95, 1)
         )
         with self.grid_layout.canvas.before:
-            Color(0.2, 0.2, 0.2, 1)  # Darker grey background
+            Color(0.2, 0.2, 0.2, 1)
             self.grid_rect = Rectangle(pos=self.grid_layout.pos, size=self.grid_layout.size)
         self.grid_layout.bind(
             pos=lambda instance, value: setattr(self.grid_rect, 'pos', value),
             size=lambda instance, value: setattr(self.grid_rect, 'size', value)
         )
-
-        # Initialize grid buttons
         self.grid_buttons = []
         total_cells = self.grid_size[0] * self.grid_size[1]
-        # Use the marker_percentage from StartScreen, default to 0.1 if not provided
         max_circles = int(total_cells * marker_percentage)
-
-        # Create a list of all possible (row, col) coordinates
-        # grid_size = (rows, columns)
         all_coordinates = []
-        for r in range(self.grid_size[0]): # Iterate through rows
-            for c in range(self.grid_size[1]): # Iterate through columns
+        for r in range(self.grid_size[0]):
+            for c in range(self.grid_size[1]):
                 all_coordinates.append((r, c))
-
-        # Randomly shuffle the list of all possible coordinates
         random.shuffle(all_coordinates)
-
-        # Select the first `max_circles` coordinates for "O" markers
         o_marker_locations_list = all_coordinates[:max_circles]
         o_marker_locations_set = set(o_marker_locations_list)
-
-        # grid_size = (rows, columns)
-        for row in range(self.grid_size[0]): # Iterate through rows
+        for row in range(self.grid_size[0]):
             button_row = []
-            for col in range(self.grid_size[1]): # Iterate through columns
+            for col in range(self.grid_size[1]):
                 if (row, col) in o_marker_locations_set:
-                    # Instantiate the custom OMarkerWidget
                     btn = OMarkerWidget()
-
-                    # Add the new widget to o_marker_buttons list
                     self.o_marker_buttons.append(btn)
-
-                    # Start its animations
-                    # It's better to schedule this to ensure the widget has been added to layout
-                    # and has its initial size determined, so animations are smooth.
                     Clock.schedule_once(lambda dt, widget=btn: widget.start_animations(), 0)
-
                 else:
-                    btn = ImageButton(
-                        source='',  # Initially no image
-                        allow_stretch=True,
-                        keep_ratio=True,
-                        size_hint=(1, 1),
-                        coords=(row, col),
-                        text=''
-                    )
+                    btn = ImageButton(source='', allow_stretch=True, keep_ratio=True, size_hint=(1, 1), coords=(row, col), text='')
                     btn.bind(on_press=self.on_grid_button_press)
-                    # btn.bind(on_release=self.show_company_info) # Removed as per instruction
-                    btn.disabled = True  # Initially, all non-circle buttons are disabled
-
+                    btn.disabled = True
                 button_row.append(btn)
                 self.grid_layout.add_widget(btn)
             self.grid_buttons.append(button_row)
-
-        # Pass the collected 'O' marker locations to GameState
         self.game_state.set_initial_o_marker_locations(o_marker_locations_set)
-
-        # Removed animation for 'O' marker buttons as per subtask instructions
-        # The new 'O' markers are Widgets with Ellipses, not Buttons with text/color animations.
-
-        self.grid_and_row_labels_row.add_widget(self.grid_layout) # Add grid_layout to its new parent
-        self.grid_plus_labels_container.add_widget(self.grid_and_row_labels_row) # Add the row containing grid and row labels
-
-        self.game_layout.add_widget(self.grid_plus_labels_container) # Add the main container to game_layout
-
-        # Button layout for additional actions
-        button_layout = BoxLayout(
-            orientation='horizontal', size_hint=(1, 0.1), spacing=10
-        )
-        self.end_turn_button = Button(
-            text="End Turn", on_press=self.process_human_end_turn, font_size=18, # Changed on_press
-            disabled=True  # Initially disabled
-        )
-        self.share_management_button = Button(
-            text="Share Management", on_press=self.show_share_management_popup, font_size=18
-        )
-        self.toggle_sidebar_button = Button(
-            text="Toggle Sidebar", on_press=self.toggle_sidebar, font_size=18
-        )
+        self.grid_and_row_labels_row.add_widget(self.grid_layout)
+        self.grid_plus_labels_container.add_widget(self.grid_and_row_labels_row)
+        self.game_layout.add_widget(self.grid_plus_labels_container)
+        button_layout = BoxLayout(orientation='horizontal', size_hint=(1, 0.1), spacing=10)
+        self.end_turn_button = Button(text="End Turn", on_press=self.process_human_end_turn, font_size=18, disabled=True)
+        self.share_management_button = Button(text="Share Management", on_press=self.show_share_management_popup, font_size=18)
+        self.toggle_sidebar_button = Button(text="Toggle Sidebar", on_press=self.toggle_sidebar, font_size=18)
         button_layout.add_widget(self.end_turn_button)
         button_layout.add_widget(self.share_management_button)
         button_layout.add_widget(self.toggle_sidebar_button)
         self.game_layout.add_widget(button_layout)
-
         self.grid_plus_labels_container.bind(size=self.update_game_board_layout)
-
         self.main_layout.add_widget(self.game_layout)
         self.update_player_info()
-
-        # Start the first turn
         self.next_turn()
-
-        Clock.schedule_once(self._finalize_initial_layout, 0.5) # 0.5s delay
+        Clock.schedule_once(self._finalize_initial_layout, 0.5)
         # Note: Clock.schedule_once(self.setup_crt_shader, 0.1) was removed as setup_crt_shader is now called by setup_fbo_shader.
         # Window.bind(on_resize=self.on_window_resize) is correctly in __init__
-
 
     def setup_crt_shader(self, dt=None):
         if self.shader: # Check self.shader
@@ -1781,3 +1472,5 @@ class GameScreen(Screen):
         anim = Animation(size_hint_x=0, opacity=0, duration=0.3)
         anim.bind(on_complete=self._trigger_grid_layout_update)
         anim.start(self.sidebar_layout)
+
+[end of game_screen.py]
