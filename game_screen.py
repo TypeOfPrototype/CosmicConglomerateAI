@@ -24,7 +24,8 @@ from kivy.graphics.shader import Shader
 from kivy.uix.effectwidget import EffectWidget
 import os # Already imported, ensure it's available where needed
 from functools import partial # Add this to imports in game_screen.py
-from kivy.graphics import InstructionGroup # Make sure this import is at the top of the file
+from kivy.graphics.instructions import InstructionGroup # Corrected import path for CrtEffect
+# Shader is already imported globally as: from kivy.graphics.shader import Shader
 
 from custom_widgets import ImageButton
 from game_logic import GameState
@@ -74,6 +75,62 @@ def _split_shader_source(source_string):
         print("Warning: Fragment shader code not found or empty in GLSL source.")
 
     return vs_code, fs_code
+
+
+class CrtEffect(InstructionGroup):
+    def __init__(self, vs_code=None, fs_code=None, **kwargs):
+        super().__init__(**kwargs)
+        self.shader = None
+        self.success = False
+        self.vs_log = ""
+        self.fs_log = ""
+
+        if vs_code and fs_code:
+            try:
+                # Ensure Kivy's Shader is used from kivy.graphics.shader
+                temp_shader = Shader(vs=vs_code, fs=fs_code)
+                # Accessing shader.success immediately after creation is correct.
+                self.success = temp_shader.success
+
+                if self.success:
+                    self.shader = temp_shader
+                    self.add(self.shader) # Add the compiled shader to this InstructionGroup
+                else:
+                    # Use getattr for safety, though these attributes should exist on Shader instances
+                    # Kivy Shader objects store logs in vs_log and fs_log properties directly after compilation attempt
+                    if hasattr(temp_shader, 'vs_log'): self.vs_log = temp_shader.vs_log
+                    if hasattr(temp_shader, 'fs_log'): self.fs_log = temp_shader.fs_log
+                    # Fallback if direct properties are empty or not present (though less likely for modern Kivy)
+                    if not self.vs_log and not self.fs_log and hasattr(temp_shader, 'get_shader_log'):
+                         # This might get both logs combined, or specific if type argument was used,
+                         # but Kivy's Shader.get_shader_log() does not take an argument.
+                         # The vs_log and fs_log properties are the correct modern way.
+                         # For robustness, let's just indicate general failure if specific logs aren't found.
+                         combined_log = temp_shader.get_shader_log()
+                         if combined_log:
+                             self.vs_log = "Combined log: " + combined_log
+                             self.fs_log = "Combined log: " + combined_log
+                         else:
+                             self.vs_log = "vs_log not available"
+                             self.fs_log = "fs_log not available"
+
+                    print(f"CrtEffect: Shader compilation failed. VS Log: {self.vs_log}, FS Log: {self.fs_log}")
+
+            except Exception as e:
+                self.success = False
+                # Ensure logs are strings
+                error_message = f"Exception during CrtEffect shader compilation: {str(e)}"
+                self.fs_log = error_message
+                self.vs_log = error_message
+                print(error_message)
+        else:
+            self.success = False
+            if not vs_code:
+                self.vs_log = "Vertex shader code not provided to CrtEffect"
+                print(self.vs_log)
+            if not fs_code:
+                self.fs_log = "Fragment shader code not provided to CrtEffect"
+                print(self.fs_log)
 
 
 # Custom Widget for 'O' Markers for optimized animations
@@ -313,9 +370,9 @@ class GameScreen(Screen):
         self.blinking_animations = []
 
         # CRT Shader related initializations
-        self.shader = None
-        self._temp_fs_code = None
-        self._temp_vs_code = None
+        self.shader = None # Initialize self.shader, used for uniform access
+        self.crt_effect_instance = None # Optional: store the effect instance
+        # self._temp_fs_code and self._temp_vs_code are removed
         self.crt_shader_path = os.path.join('assets', 'crt_shader.glsl')
         self.effect_widget = None
         self.crt_effect_on = 1.0
@@ -326,71 +383,93 @@ class GameScreen(Screen):
         self.crt_noise_amount = 0.05
 
         self.effect_widget = EffectWidget()
-        self.add_widget(self.effect_widget)
+        # self.add_widget(self.effect_widget) # Moved after shader setup attempt
 
         shader_file_path = self.crt_shader_path
-        print(f"Attempting to load CRT shader strings from: {os.path.abspath(shader_file_path)}")
+        print(f"Attempting to load CRT shader from: {os.path.abspath(shader_file_path)}")
 
         if not os.path.exists(shader_file_path):
             print(f"--- ERROR: CRT Shader file NOT FOUND at: {os.path.abspath(shader_file_path)} ---")
+            self.shader = None
         else:
             try:
                 with open(shader_file_path, 'r') as f:
                     combined_shader_source = f.read()
 
                 vs_code, fs_code = _split_shader_source(combined_shader_source)
-                self._temp_fs_code = fs_code
-                self._temp_vs_code = vs_code
 
-                if self._temp_vs_code and self._temp_fs_code:
-                    Clock.schedule_once(self.setup_fbo_shader)
+                if vs_code and fs_code:
+                    self.crt_effect_instance = CrtEffect(vs_code=vs_code, fs_code=fs_code)
+
+                    if self.crt_effect_instance.success:
+                        self.effect_widget.effects = [self.crt_effect_instance]
+                        self.shader = self.crt_effect_instance.shader
+                        print("--- SUCCESS: CrtEffect created, shader compiled, and assigned to EffectWidget. ---")
+                        self.setup_crt_shader()
+                    else:
+                        print(f"--- ERROR: CrtEffect shader compilation failed. ---")
+                        if hasattr(self.crt_effect_instance, 'vs_log') and self.crt_effect_instance.vs_log:
+                            print(f"VS Log: {self.crt_effect_instance.vs_log}")
+                        if hasattr(self.crt_effect_instance, 'fs_log') and self.crt_effect_instance.fs_log:
+                            print(f"FS Log: {self.crt_effect_instance.fs_log}")
+                        self.shader = None
                 else:
-                    print("--- ERROR: Failed to parse vertex or fragment shader from source file. ---")
+                    print("--- ERROR: Failed to parse vertex or fragment shader from source file for CrtEffect. ---")
+                    self.shader = None
             except Exception as e:
-                print(f"--- EXCEPTION during shader file reading or parsing: {e} ---")
+                print(f"--- EXCEPTION during CrtEffect creation or shader file processing: {e} ---")
+                self.shader = None
 
+        self.add_widget(self.effect_widget)
         Window.bind(on_resize=self.on_window_resize)
 
-    def setup_fbo_shader(self, dt=None):
-        if not hasattr(self, '_temp_fs_code') or not self._temp_fs_code or \
-           not hasattr(self, '_temp_vs_code') or not self._temp_vs_code:
-            print("--- ERROR: Shader code (fs/vs) not found on self for setup_fbo_shader. Aborting shader setup. ---")
-            return
+    # def setup_fbo_shader(self, dt=None): # METHOD REMOVED
+    #     if not hasattr(self, '_temp_fs_code') or not self._temp_fs_code or \
+    #        not hasattr(self, '_temp_vs_code') or not self._temp_vs_code:
+    #         print("--- ERROR: Shader code (fs/vs) not found on self for setup_fbo_shader. Aborting shader setup. ---")
+    #         return
 
-        if self.effect_widget.fbo:
-            try:
-                print(f"--- Assigning shader strings to FBO. Current FBO: {self.effect_widget.fbo} ---")
-                # These assignments trigger internal compilation by the FBO (RenderContext)
-                self.effect_widget.fbo.fs = self._temp_fs_code
-                self.effect_widget.fbo.vs = self._temp_vs_code
+    #     if self.effect_widget.fbo:
+    #         try:
+    #             print(f"--- Assigning shader strings to FBO. Current FBO: {self.effect_widget.fbo} ---")
+    #             # These assignments trigger internal compilation by the FBO (RenderContext)
+    #             self.effect_widget.fbo.fs = self._temp_fs_code
+    #             self.effect_widget.fbo.vs = self._temp_vs_code
 
-                # Get the FBO's internal compiled shader object
-                internal_fbo_shader = self.effect_widget.fbo.shader
+    #             # Get the FBO's internal compiled shader object
+    #             internal_fbo_shader = self.effect_widget.fbo.shader
 
-                if internal_fbo_shader and hasattr(internal_fbo_shader, 'success') and internal_fbo_shader.success:
-                    self.shader = internal_fbo_shader # Assign the valid, compiled shader to self.shader
-                    print(f"--- SUCCESS: FBO's internal shader compiled and assigned. Shader object: {self.shader} ---")
-                    self.setup_crt_shader() # Initialize uniforms on the valid shader
-                else:
-                    print(f"--- ERROR: FBO's internal shader failed to compile or is invalid. ---")
-                    if internal_fbo_shader and hasattr(internal_fbo_shader, 'vs_log') and hasattr(internal_fbo_shader, 'fs_log'):
-                        # These logs are on the Shader object itself
-                        print("FBO Internal Vertex Shader Log:\n", internal_fbo_shader.vs_log)
-                        print("FBO Internal Fragment Shader Log:\n", internal_fbo_shader.fs_log)
-                    elif internal_fbo_shader:
-                         print(f"FBO Internal Shader object exists ({internal_fbo_shader}) but 'success', 'vs_log', or 'fs_log' attribute might be missing or success is false.")
-                    else:
-                        print("FBO Internal Shader object (self.effect_widget.fbo.shader) is None.")
+    #             if internal_fbo_shader and hasattr(internal_fbo_shader, 'success') and internal_fbo_shader.success:
+    #                 self.shader = internal_fbo_shader # Assign the valid, compiled shader to self.shader
+    #                 print(f"--- SUCCESS: FBO's internal shader compiled and assigned. Shader object: {self.shader} ---")
+    #                 self.setup_crt_shader() # Initialize uniforms on the valid shader
+    #             else:
+    #                 print(f"--- ERROR: FBO's internal shader failed to compile or is invalid. ---")
+    #                 if internal_fbo_shader: # Check if internal_fbo_shader is not None before accessing logs
+    #                     if hasattr(internal_fbo_shader, 'vs_log'):
+    #                         print("FBO Internal Vertex Shader Log:\n", internal_fbo_shader.vs_log)
+    #                     else:
+    #                         print("FBO Internal Vertex Shader Log: Not available.")
+    #                     if hasattr(internal_fbo_shader, 'fs_log'):
+    #                         print("FBO Internal Fragment Shader Log:\n", internal_fbo_shader.fs_log)
+    #                     else:
+    #                         print("FBO Internal Fragment Shader Log: Not available.")
+    #                     if not hasattr(internal_fbo_shader, 'success'):
+    #                         print("FBO Internal Shader 'success' attribute missing.")
+    #                     elif not internal_fbo_shader.success:
+    #                          print("FBO Internal Shader 'success' attribute is False.")
+    #                 else:
+    #                     print("FBO Internal Shader object (self.effect_widget.fbo.shader) is None after fs/vs assignment.")
 
-                    self.shader = None # Ensure self.shader is None if setup failed
+    #                 self.shader = None # Ensure self.shader is None if setup failed
 
-            except Exception as e:
-                print(f"--- EXCEPTION during FBO shader fs/vs assignment or internal shader retrieval: {e} ---")
-                self.shader = None # Ensure self.shader is None on error
-        else:
-            # ... (rescheduling logic remains the same) ...
-            print("--- ERROR: EffectWidget FBO not available for shader assignment. Retrying... ---")
-            Clock.schedule_once(self.setup_fbo_shader, 0.1)
+    #         except Exception as e:
+    #             print(f"--- EXCEPTION during FBO shader fs/vs assignment or internal shader retrieval: {e} ---")
+    #             self.shader = None # Ensure self.shader is None on error
+    #     else:
+    #         # ... (rescheduling logic remains the same) ...
+    #         print("--- ERROR: EffectWidget FBO not available for shader assignment. Retrying... ---")
+    #         Clock.schedule_once(self.setup_fbo_shader, 0.1)
 
 
     def initialize_game(self, player_configurations, grid_size, game_turn_length, marker_percentage=0.1): # player_names -> player_configurations
