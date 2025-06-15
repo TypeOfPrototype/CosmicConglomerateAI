@@ -5,22 +5,35 @@ VERTEX_SHADER = """
 // It receives vertex attributes (position and texture coordinates)
 // from the application and passes them to the fragment shader.
 
-// Input vertex attribute: Position of the vertex
-attribute vec2 position;
-// Input vertex attribute: Texture coordinate of the vertex
-attribute vec2 texCoord;
+// Standard Kivy attributes
+attribute vec3 vertex;
+attribute vec2 tex_coord;
+attribute vec4 color; // Kivy's default vertex format includes color
 
-// Output varying variable: Texture coordinate to be interpolated
-// and passed to the fragment shader.
-varying vec2 vTexCoord;
+// Uniforms provided by Kivy's RenderContext
+uniform mat4 modelview_mat;
+uniform mat4 projection_mat;
+// uniform vec4 frag_color; // This is usually a varying, not a uniform passed in by default for custom shaders like this
+// uniform float opacity; // Similarly, opacity is often handled via frag_color.a
+
+// Output varying variables to be interpolated and passed to the fragment shader.
+varying vec4 frag_color; // To pass vertex color or a default color
+varying vec2 tex_coord0; // To pass texture coordinates
 
 void main() {
+    // Standard Kivy transformation for vertex position.
+    // The FBO content is typically drawn on a simple quad, so vertex.xy is used.
+    // z=0, w=1 for 2D rendering.
+    gl_Position = projection_mat * modelview_mat * vec4(vertex.xy, 0.0, 1.0);
+
     // Pass the texture coordinate to the fragment shader.
-    vTexCoord = texCoord;
-    // Transform the vertex position to clip space.
-    // gl_Position is a built-in GLSL variable that holds the final
-    // transformed vertex position.
-    gl_Position = vec4(position, 0.0, 1.0);
+    // Kivy binds the FBO texture to tex_coord0 by default for the first texture.
+    tex_coord0 = tex_coord;
+
+    // Pass the vertex color (or a default color) to the fragment shader.
+    // This allows tinting or using vertex colors if needed, though for FBO rendering
+    // it's often just white.
+    frag_color = color;
 }
 """
 
@@ -35,7 +48,7 @@ uniform float time;      // Time in seconds, used for animations like flicker.
 uniform sampler2D tex0;  // The input texture (e.g., the game screen).
 
 // Varying variable: Texture coordinate interpolated from the vertex shader.
-varying vec2 vTexCoord;
+varying vec2 tex_coord0; // Changed from vTexCoord to match vertex shader
 
 // -- Configuration Constants for Effects --
 // These constants can be tweaked to change the intensity of the effects.
@@ -82,16 +95,16 @@ float rand(vec2 co){
     // A common way to generate pseudo-random numbers in shaders.
     // It uses the fractional part of the sine of a large number
     // based on the dot product of the input coordinate and a fixed vector.
-    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453));
+    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
 }
 
 void main() {
     // -- 0. Normalize Texture Coordinates --
-    // vTexCoord ranges from 0.0 to 1.0.
+    // tex_coord0 ranges from 0.0 to 1.0.
     // For some effects, it's easier to work with coordinates
     // that are centered at (0,0) and range from -0.5 to 0.5,
     // or use aspect ratio correction.
-    vec2 uv = vTexCoord;
+    vec2 uv = tex_coord0;
 
     // -- 1. Barrel Distortion --
     // This effect simulates the curvature of old CRT screens.
@@ -259,8 +272,9 @@ class CRTEffectWidget(FloatLayout):
         self.fbo_rect.size = self.size
         self.fbo_rect.pos = self.pos
         # Update shader resolution uniform
-        if 'resolution' in self.canvas:
-            self.canvas['resolution'] = list(self.size)
+        # Removing the check `if 'resolution' in self.canvas:` to see if direct assignment works
+        # or provides a more specific error if the uniform is problematic.
+        self.canvas['resolution'] = list(self.size)
 
     def update_glsl(self, dt):
         """
