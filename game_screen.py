@@ -314,8 +314,8 @@ class GameScreen(Screen):
 
         # CRT Shader related initializations
         self.shader = None
-        self._temp_fs_code = None # Temporary storage for shader code
-        self._temp_vs_code = None # Temporary storage for shader code
+        self._temp_fs_code = None
+        self._temp_vs_code = None
         self.crt_shader_path = os.path.join('assets', 'crt_shader.glsl')
         self.effect_widget = None
         self.crt_effect_on = 1.0
@@ -339,11 +339,11 @@ class GameScreen(Screen):
                     combined_shader_source = f.read()
 
                 vs_code, fs_code = _split_shader_source(combined_shader_source)
-                self._temp_fs_code = fs_code # Store on self
-                self._temp_vs_code = vs_code # Store on self
+                self._temp_fs_code = fs_code
+                self._temp_vs_code = vs_code
 
                 if self._temp_vs_code and self._temp_fs_code:
-                    Clock.schedule_once(self.setup_fbo_shader) # Schedule the FBO setup
+                    Clock.schedule_once(self.setup_fbo_shader)
                 else:
                     print("--- ERROR: Failed to parse vertex or fragment shader from source file. ---")
             except Exception as e:
@@ -351,32 +351,44 @@ class GameScreen(Screen):
 
         Window.bind(on_resize=self.on_window_resize)
 
-    # This method is now part of the GameScreen class
     def setup_fbo_shader(self, dt=None):
-        if not hasattr(self, '_temp_fs_code') or not hasattr(self, '_temp_vs_code') or \
-           not self._temp_fs_code or not self._temp_vs_code:
+        if not hasattr(self, '_temp_fs_code') or not self._temp_fs_code or \
+           not hasattr(self, '_temp_vs_code') or not self._temp_vs_code:
             print("--- ERROR: Shader code (fs/vs) not found on self for setup_fbo_shader. Aborting shader setup. ---")
             return
 
         if self.effect_widget.fbo:
             try:
                 print(f"--- Assigning shader strings to FBO. Current FBO: {self.effect_widget.fbo} ---")
+                # These assignments trigger internal compilation by the FBO (RenderContext)
                 self.effect_widget.fbo.fs = self._temp_fs_code
                 self.effect_widget.fbo.vs = self._temp_vs_code
 
-                self.shader = self.effect_widget.fbo # The FBO itself is the shader context
+                # Get the FBO's internal compiled shader object
+                internal_fbo_shader = self.effect_widget.fbo.shader
 
-                if hasattr(self.shader, 'uniforms'):
-                    print(f"--- SUCCESS: Shader strings assigned to FBO. FBO (shader context) is now: {self.shader}. Uniforms are accessible. ---")
-                    self.setup_crt_shader()
+                if internal_fbo_shader and hasattr(internal_fbo_shader, 'success') and internal_fbo_shader.success:
+                    self.shader = internal_fbo_shader # Assign the valid, compiled shader to self.shader
+                    print(f"--- SUCCESS: FBO's internal shader compiled and assigned. Shader object: {self.shader} ---")
+                    self.setup_crt_shader() # Initialize uniforms on the valid shader
                 else:
-                    print(f"--- WARNING: FBO shader configured, but 'uniforms' attribute not immediately found on FBO {self.shader}. Proceeding with setup_crt_shader. ---")
-                    self.setup_crt_shader()
+                    print(f"--- ERROR: FBO's internal shader failed to compile or is invalid. ---")
+                    if internal_fbo_shader and hasattr(internal_fbo_shader, 'vs_log') and hasattr(internal_fbo_shader, 'fs_log'):
+                        # These logs are on the Shader object itself
+                        print("FBO Internal Vertex Shader Log:\n", internal_fbo_shader.vs_log)
+                        print("FBO Internal Fragment Shader Log:\n", internal_fbo_shader.fs_log)
+                    elif internal_fbo_shader:
+                         print(f"FBO Internal Shader object exists ({internal_fbo_shader}) but 'success', 'vs_log', or 'fs_log' attribute might be missing or success is false.")
+                    else:
+                        print("FBO Internal Shader object (self.effect_widget.fbo.shader) is None.")
+
+                    self.shader = None # Ensure self.shader is None if setup failed
 
             except Exception as e:
-                print(f"--- EXCEPTION during FBO shader fs/vs assignment: {e} ---")
-                self.shader = None
+                print(f"--- EXCEPTION during FBO shader fs/vs assignment or internal shader retrieval: {e} ---")
+                self.shader = None # Ensure self.shader is None on error
         else:
+            # ... (rescheduling logic remains the same) ...
             print("--- ERROR: EffectWidget FBO not available for shader assignment. Retrying... ---")
             Clock.schedule_once(self.setup_fbo_shader, 0.1)
 
