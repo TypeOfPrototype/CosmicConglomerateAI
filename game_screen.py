@@ -255,7 +255,7 @@ class GameScreen(Screen):
     def __init__(self, **kwargs):
         super(GameScreen, self).__init__(**kwargs)
         self.main_layout = BoxLayout(orientation='horizontal')
-        self.add_widget(self.main_layout)
+        # self.add_widget(self.main_layout) # REMOVED - This was causing the issue
 
         # Initialize sidebar visibility and original width
         self.sidebar_visible = False
@@ -267,8 +267,8 @@ class GameScreen(Screen):
         self.blinking_animations = []
 
         # CRT Shader related initializations
-        self.crt_shader_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'crt_shader.glsl')
-        self.crt_shader = None
+        self.crt_shader_path = os.path.join('assets', 'crt_shader.glsl') # Corrected path
+        self.shader = None # Ensure self.shader is used consistently with the provided snippet
         self.effect_widget = None
         self.crt_effect_on = 1.0
         self.crt_scanline_intensity = 0.5
@@ -278,33 +278,44 @@ class GameScreen(Screen):
         self.crt_noise_amount = 0.05
 
         try:
-            if os.path.exists(self.crt_shader_path):
-                with open(self.crt_shader_path, 'r') as f:
-                    shader_content = f.read()
-                self.crt_shader = Shader(glsl=shader_content)
-                if not self.crt_shader.is_compiled:
-                    print(f"CRT Shader failed to compile: {self.crt_shader.get_shader_log()}")
-                    self.crt_shader = None
+            if not os.path.exists(self.crt_shader_path): # Corrected variable name
+                print(f"CRT Shader file not found at: {os.path.abspath(self.crt_shader_path)}") # Corrected variable name
+                self.shader = None
+            else:
+                with open(self.crt_shader_path, 'r') as f: # Corrected variable name
+                    shader_source = f.read()
+                self.shader = Shader(glsl=shader_source) # Kivy handles vs/fs from combined source, use glsl=
+                if not self.shader.is_compiled: # Corrected to check self.shader.is_compiled
+                    print("Failed to compile CRT shader:")
+                    # Kivy Shader object does not have separate get_shader_log(0) or (1).
+                    # It has a single log if compilation fails.
+                    print("Shader Log:", self.shader.get_shader_log())
+                    self.shader = None
                 else:
                     print("CRT Shader compiled successfully.")
-            else:
-                print(f"CRT Shader file not found at: {self.crt_shader_path}")
         except Exception as e:
             print(f"Error loading CRT Shader: {e}")
-            self.crt_shader = None
+            self.shader = None
+
 
         self.effect_widget = EffectWidget()
-        if self.crt_shader:
-            self.effect_widget.effects = [self.crt_shader]
+        if self.shader: # Check self.shader
+            self.effect_widget.effects = [self.shader] # Use self.shader
 
-        # Add the effect_widget to the screen, main_layout will be added to effect_widget
-        self.add_widget(self.effect_widget)
+        # Add effect_widget to GameScreen
+        self.add_widget(self.effect_widget) # THIS IS KEY
+
+        # Bind window resize for shader resolution uniform
+        Window.bind(on_resize=self.on_window_resize)
 
 
     def initialize_game(self, player_configurations, grid_size, game_turn_length, marker_percentage=0.1): # player_names -> player_configurations
         # self.main_layout is now a child of self.effect_widget
         self.main_layout.clear_widgets()
-        self.effect_widget.add_widget(self.main_layout) # Add main_layout to effect_widget
+        if self.effect_widget not in self.main_layout.children: # Ensure it's only added if not already present (defensive)
+            if self.main_layout.parent: # If main_layout somehow still has a parent, remove it
+                self.main_layout.parent.remove_widget(self.main_layout)
+            self.effect_widget.add_widget(self.main_layout) # Add main_layout to effect_widget
 
         self.o_marker_buttons = []
 
@@ -603,7 +614,7 @@ class GameScreen(Screen):
 
 
     def setup_crt_shader(self, dt=None):
-        if self.effect_widget and self.crt_shader:
+        if self.effect_widget and self.shader: # Check self.shader
             self.effect_widget.shader_uniforms = {
                 'resolution': [Window.width, Window.height],
                 'time': 0.0,
@@ -620,11 +631,11 @@ class GameScreen(Screen):
             print("CRT Shader or EffectWidget not available for setup.")
 
     def update_shader_time(self, dt):
-        if self.effect_widget and self.crt_shader and self.effect_widget.shader_uniforms:
+        if self.effect_widget and self.shader and self.effect_widget.shader_uniforms: # Check self.shader
             self.effect_widget.shader_uniforms['time'] += dt
 
     def on_window_resize(self, window, width, height):
-        if self.effect_widget and self.crt_shader and self.effect_widget.shader_uniforms:
+        if self.effect_widget and self.shader and self.effect_widget.shader_uniforms: # Check self.shader
             self.effect_widget.shader_uniforms['resolution'] = [width, height]
             print(f"Updated shader resolution to: [{width}, {height}]")
 
