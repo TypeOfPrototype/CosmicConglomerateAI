@@ -31,6 +31,51 @@ from game_logic import GameState
 from profile_manager import ProfileManager, UserProfile
 
 
+# Helper function to split combined GLSL shader source
+def _split_shader_source(source_string):
+    vs_code = None
+    fs_code = None
+
+    lines = source_string.splitlines()
+    current_shader_type = None # Can be 'vs', 'fs', or None
+    current_code = []
+
+    for line in lines:
+        stripped_line = line.strip().upper()
+        if stripped_line.startswith("---VERTEX SHADER---"):
+            if current_shader_type == 'vs' and current_code: # Should not happen with clean file
+                print("Warning: Multiple ---VERTEX SHADER--- sections found.")
+            elif current_shader_type == 'fs' and current_code:
+                fs_code = "\n".join(current_code)
+                current_code = []
+            current_shader_type = 'vs'
+            continue # Skip the delimiter line itself
+        elif stripped_line.startswith("---FRAGMENT SHADER---"):
+            if current_shader_type == 'fs' and current_code: # Should not happen
+                 print("Warning: Multiple ---FRAGMENT SHADER--- sections found.")
+            elif current_shader_type == 'vs' and current_code:
+                vs_code = "\n".join(current_code)
+                current_code = []
+            current_shader_type = 'fs'
+            continue # Skip the delimiter line itself
+
+        if current_shader_type:
+            current_code.append(line)
+
+    # After loop, assign the last collected code
+    if current_shader_type == 'vs' and current_code and not vs_code:
+        vs_code = "\n".join(current_code)
+    elif current_shader_type == 'fs' and current_code and not fs_code:
+        fs_code = "\n".join(current_code)
+
+    if not vs_code:
+        print("Warning: Vertex shader code not found or empty in GLSL source.")
+    if not fs_code:
+        print("Warning: Fragment shader code not found or empty in GLSL source.")
+
+    return vs_code, fs_code
+
+
 # Custom Widget for 'O' Markers for optimized animations
 class OMarkerWidget(Widget):
     ellipse_current_scale = NumericProperty(0.8)
@@ -268,9 +313,10 @@ class GameScreen(Screen):
         self.blinking_animations = []
 
         # CRT Shader related initializations
-        self.shader = None # Explicitly initialize self.shader to None
-        self.crt_shader_path = os.path.join('assets', 'crt_shader.glsl') # Ensure this is the variable name used below
-        self.effect_widget = None
+        # self.shader is no longer directly instantiated here.
+        self.shader = None # Keep for uniform access, will be set by FBO later if needed for direct uniform manipulation.
+        self.crt_shader_path = os.path.join('assets', 'crt_shader.glsl')
+        self.effect_widget = None # Will be created before shader string assignment
         self.crt_effect_on = 1.0
         self.crt_scanline_intensity = 0.5
         self.crt_curvature_amount = 0.05
@@ -278,64 +324,58 @@ class GameScreen(Screen):
         self.crt_chromatic_aberration_amount = 0.5
         self.crt_noise_amount = 0.05
 
-        print(f"Attempting to load CRT shader from: {os.path.abspath(self.crt_shader_path)}") # Debug print for path
+        self.effect_widget = EffectWidget()
+        self.add_widget(self.effect_widget) # Add effect widget to screen
 
-        if not os.path.exists(self.crt_shader_path):
-            print(f"--- ERROR: CRT Shader file NOT FOUND at: {os.path.abspath(self.crt_shader_path)} ---")
+        shader_file_path = self.crt_shader_path # Use the instance variable
+        print(f"Attempting to load CRT shader strings from: {os.path.abspath(shader_file_path)}")
+
+        if not os.path.exists(shader_file_path):
+            print(f"--- ERROR: CRT Shader file NOT FOUND at: {os.path.abspath(shader_file_path)} ---")
         else:
             try:
-                # Create a temporary Shader instance to check for success
-                # Kivy's Shader(source=filepath) handles opening and reading the file.
-                # However, the previous change used Shader(glsl=...) which is for direct string content.
-                # For consistency with loading from a file path, and as per Kivy docs for combined shaders in one file:
-                # We should read the file content first, then pass to glsl.
-                # The prompt example uses Shader(source=shader_file_path) - this is for separate .vs and .fs files if path has no extension,
-                # or for specific .glsl files. Let's stick to reading then glsl if it's a single combined file.
-                # Given crt_shader.glsl is a single file, reading its content and using glsl is appropriate.
-                # The prompt used temp_shader = Shader(source=shader_file_path) which might imply Kivy handles it.
-                # Kivy Shader(source=...) can load .glsl files directly. Let's follow the prompt's directness here.
+                with open(shader_file_path, 'r') as f:
+                    combined_shader_source = f.read()
 
-                temp_shader = Shader(source=self.crt_shader_path) # Use the path directly as per prompt.
+                vs_code, fs_code = _split_shader_source(combined_shader_source)
 
-                if temp_shader.success: # 'success' is the attribute Kivy uses.
-                    self.shader = temp_shader # Assign to self.shader only if successful
-                    print("--- SUCCESS: CRT Shader compiled successfully. ---")
+                if vs_code and fs_code:
+                    # Store vs_code and fs_code if needed for later, though Fbo assigns them internally.
+                    # self.vs_code = vs_code
+                    # self.fs_code = fs_code
+
+                    def setup_fbo_shader(dt=None):
+                        if self.effect_widget.fbo:
+                            self.effect_widget.fbo.shader_fs = fs_code
+                            self.effect_widget.fbo.shader_vs = vs_code
+                            # After assigning strings, Kivy's Fbo internally creates a Shader object.
+                            # We can try to get a reference to it for uniform manipulation if Kivy exposes it.
+                            # Typically, uniforms for FBO shaders are set via fbo['uniform_name'] = value
+                            # Or, if EffectWidget rebuilds its own internal shader from these strings,
+                            # we might still use self.shader (if EffectWidget populates it) or a new way.
+                            # For now, let's assume uniform setting logic in setup_crt_shader will need adjustment
+                            # if self.shader is no longer the primary Shader object.
+                            # The prompt seems to imply self.shader.uniforms will still be used.
+                            # This means self.shader needs to be the Fbo's internal shader.
+                            # Kivy's Fbo has a 'shader' property after shader_fs/vs are set.
+                            self.shader = self.effect_widget.fbo.shader # Get reference to FBO's shader
+
+                            print("--- SUCCESS: CRT Shader strings assigned to EffectWidget's FBO. ---")
+                            if self.shader:
+                                print("--- FBO's internal shader object obtained. ---")
+                                self.setup_crt_shader() # Uniforms setup
+                            else:
+                                print("--- ERROR: Could not obtain FBO's internal shader object after setting strings. ---")
+                        else:
+                            print("--- ERROR: EffectWidget FBO not available for shader assignment. Retrying... ---")
+                            Clock.schedule_once(setup_fbo_shader, 0.1) # Retry shortly
+
+                    Clock.schedule_once(setup_fbo_shader)
                 else:
-                    print("--- ERROR: Failed to compile CRT shader. ---")
-                    # Kivy's Shader object stores vs_log and fs_log if separate shaders were loaded.
-                    # For a single .glsl file loaded via source, the main log is usually in fs_log or just through get_shader_log().
-                    # The prompt's get_shader_log(0) and get_shader_log(1) was from an older understanding.
-                    # A single combined .glsl file processed by Kivy might put all logs into fs_log or a general log.
-                    # Let's check for specific attributes vs_log and fs_log as per the prompt.
-                    if hasattr(temp_shader, 'vs_log') and temp_shader.vs_log:
-                         print("Vertex Shader Log:\n", temp_shader.vs_log)
-                    else:
-                         print("Vertex Shader Log: Not available or empty.")
-                    if hasattr(temp_shader, 'fs_log') and temp_shader.fs_log:
-                         print("Fragment Shader Log:\n", temp_shader.fs_log)
-                    else:
-                         print("Fragment Shader Log: Not available or empty.")
-                    # self.shader remains None if compilation fails
-
+                    print("--- ERROR: Failed to parse vertex or fragment shader from source file. ---")
             except Exception as e:
-                print(f"--- EXCEPTION during shader loading/compilation: {e} ---")
-                # self.shader remains None in case of other exceptions
+                print(f"--- EXCEPTION during shader file reading or parsing: {e} ---")
 
-        # This part remains the same:
-        self.effect_widget = EffectWidget()
-        if self.shader: # This check is now more meaningful
-            shader_container = InstructionGroup()
-            shader_container.add(self.shader)
-            # Add a default texture binding for texture0, which the shader expects.
-            # EffectWidget provides its FBO output as texture0 to the shader.
-            # We typically don't need to add a Rectangle here if EffectWidget handles it.
-            # The shader in EffectWidget operates on the FBO's texture.
-            self.effect_widget.effects = [shader_container]
-            print("Compiled shader wrapped in InstructionGroup and assigned to EffectWidget.effects.")
-        else:
-            print("CRT Shader not available, EffectWidget will have no custom effects.")
-
-        self.add_widget(self.effect_widget)
         Window.bind(on_resize=self.on_window_resize)
 
 
@@ -639,8 +679,8 @@ class GameScreen(Screen):
         self.next_turn()
 
         Clock.schedule_once(self._finalize_initial_layout, 0.5) # 0.5s delay
-        Clock.schedule_once(self.setup_crt_shader, 0.1) # Schedule shader setup
-        Window.bind(on_resize=self.on_window_resize)
+        # Clock.schedule_once(self.setup_crt_shader, 0.1) # REMOVED: Now called from setup_fbo_shader
+        # Window.bind(on_resize=self.on_window_resize) # This was already bound in __init__
 
 
     def setup_crt_shader(self, dt=None):
