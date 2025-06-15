@@ -614,29 +614,27 @@ class GameScreen(Screen):
 
 
     def setup_crt_shader(self, dt=None):
-        if self.effect_widget and self.shader: # Check self.shader
-            self.effect_widget.shader_uniforms = {
-                'resolution': [Window.width, Window.height],
-                'time': 0.0,
-                'effect_on': self.crt_effect_on,
-                'scanline_intensity': self.crt_scanline_intensity,
-                'curvature_amount': self.crt_curvature_amount,
-                'vignette_intensity': self.crt_vignette_intensity,
-                'chromatic_aberration_amount': self.crt_chromatic_aberration_amount,
-                'noise_amount': self.crt_noise_amount
-            }
+        if self.shader: # Check self.shader
+            self.shader.uniforms['resolution'] = [Window.width, Window.height]
+            self.shader.uniforms['time'] = 0.0
+            self.shader.uniforms['effect_on'] = self.crt_effect_on
+            self.shader.uniforms['scanline_intensity'] = self.crt_scanline_intensity
+            self.shader.uniforms['curvature_amount'] = self.crt_curvature_amount
+            self.shader.uniforms['vignette_intensity'] = self.crt_vignette_intensity
+            self.shader.uniforms['chromatic_aberration_amount'] = self.crt_chromatic_aberration_amount
+            self.shader.uniforms['noise_amount'] = self.crt_noise_amount
             Clock.schedule_interval(self.update_shader_time, 1/60.0)
             print("CRT Shader uniforms initialized and time update scheduled.")
         else:
-            print("CRT Shader or EffectWidget not available for setup.")
+            print("CRT Shader not available for setup.") # Corrected message
 
     def update_shader_time(self, dt):
-        if self.effect_widget and self.shader and self.effect_widget.shader_uniforms: # Check self.shader
-            self.effect_widget.shader_uniforms['time'] += dt
+        if self.shader: # Check self.shader
+            self.shader.uniforms['time'] += dt
 
     def on_window_resize(self, window, width, height):
-        if self.effect_widget and self.shader and self.effect_widget.shader_uniforms: # Check self.shader
-            self.effect_widget.shader_uniforms['resolution'] = [width, height]
+        if self.shader: # Check self.shader
+            self.shader.uniforms['resolution'] = [width, height]
             print(f"Updated shader resolution to: [{width}, {height}]")
 
     def _finalize_initial_layout(self, dt):
@@ -1472,16 +1470,17 @@ class GameScreen(Screen):
 
     def on_crt_effect_toggle(self, switch_instance, active_state):
         self.crt_effect_on = 1.0 if active_state else 0.0
-        if self.effect_widget and self.effect_widget.shader_uniforms:
-            self.effect_widget.shader_uniforms['effect_on'] = self.crt_effect_on
+        if self.shader: # Check self.shader
+            self.shader.uniforms['effect_on'] = self.crt_effect_on
         print(f"CRT Effect toggled: {'On' if active_state else 'Off'}")
 
     def on_crt_slider_value_change(self, slider_instance, value, value_label_instance, uniform_name, instance_var_name):
         value_label_instance.text = f"{value:.2f}"
         setattr(self, instance_var_name, value)
-        if self.effect_widget and self.effect_widget.shader_uniforms:
-            self.effect_widget.shader_uniforms[uniform_name] = value
-        # print(f"CRT Slider {uniform_name} changed to {value:.2f}") # Optional: for debugging
+        if self.shader: # Check if shader exists
+            self.shader.uniforms[uniform_name] = value
+        else:
+            print(f"Debug: Shader not found, cannot set uniform {uniform_name}") # Optional debug
 
     def on_fullscreen_toggle(self, switch_instance, active_state):
         if active_state:
