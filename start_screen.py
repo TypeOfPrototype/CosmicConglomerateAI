@@ -511,9 +511,13 @@ class StartScreen(Screen):
         # Retrieve grid size
         grid_size_text = self.grid_size_spinner.text
         if 'x' in grid_size_text:
-            cols, rows = map(int, grid_size_text.split('x'))
+            # Spinner text "DisplayRows x DisplayCols"
+            display_rows, display_cols = map(int, grid_size_text.split('x'))
+
+            # Swap them for actual game grid dimensions to make grid wider
+            actual_rows = display_cols
+            actual_cols = display_rows
         else:
-            # Display an error popup if grid size is not selected
             # Display an error popup if grid size is not selected
             self._show_error_popup('Please select a valid grid size.')
             return
@@ -533,7 +537,7 @@ class StartScreen(Screen):
         marker_percentage = self.marker_percentage_slider.value / 100.0
         game_params = {
             'player_configurations': player_configurations,
-            'grid_size': (cols, rows),
+            'grid_size': (actual_rows, actual_cols), # Pass swapped dimensions
             'game_turn_length': game_turn_length,
             'marker_percentage': marker_percentage
         }

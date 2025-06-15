@@ -80,6 +80,174 @@ class OMarkerWidget(Widget):
 
 
 class GameScreen(Screen):
+    def update_game_board_layout(self, instance, value):
+        # instance is the widget whose size change triggered this, e.g., self.grid_plus_labels_container
+        # value is its new size (width, height)
+
+        available_width = value[0]
+        available_height = value[1]
+
+        if not hasattr(self, 'grid_size') or not self.grid_size or not hasattr(self, 'grid_layout'):
+            print("Warning: Game board components not ready for layout update.")
+            return
+
+        num_rows = self.grid_size[0]
+        num_cols = self.grid_size[1]
+
+        if num_rows == 0 or num_cols == 0:
+            return
+
+        # Define proportions for labels vs grid (these are initial size_hints)
+        # These might need to be fixed values if size_hints are removed from children
+        row_labels_width_proportion = 0.05
+        col_labels_height_proportion = 0.05
+        # grid_layout_width_proportion = 0.95 (of remaining after row_labels)
+        # grid_layout_height_proportion = 0.95 (of remaining after col_labels)
+
+        # Calculate space available for the main grid (self.grid_layout)
+        # This needs to account for the space the labels will take.
+        # This is tricky because label sizes depend on grid size and vice-versa if we want alignment.
+
+        # Let's determine cell_edge based on the total available space for the grid AND its labels.
+        # The grid itself is in grid_and_row_labels_row (takes X% of width, 95% of height of grid_plus_labels_container)
+        # And col_labels_and_spacer_row (takes X% of width, 5% of height of grid_plus_labels_container)
+
+        # Effective space for the interactive grid area (grid_layout + row_labels + col_labels + corner_spacer)
+        # This is essentially the full space of self.grid_plus_labels_container
+
+        spacing_x, spacing_y = self.grid_layout.spacing if isinstance(self.grid_layout.spacing, (list, tuple)) else (self.grid_layout.spacing, self.grid_layout.spacing)
+
+        # Calculate potential cell_edge if row/col labels had zero size:
+        # This is the available space for the *grid cells area* within grid_plus_labels_container
+        # grid_plus_labels_container contains:
+        #   col_labels_and_spacer_row (height: 5% of available_height)
+        #   grid_and_row_labels_row (height: 95% of available_height)
+
+        # Space for (grid + row_labels):
+        # Use the original size_hint_y proportion (0.95 for grid_and_row_labels_row)
+        space_for_grid_and_row_labels_h = available_height * 0.95
+        # Space for (col_labels + corner_spacer):
+        # Use the original size_hint_y proportion (0.05 for col_labels_and_spacer_row)
+        space_for_col_labels_and_spacer_h = available_height * 0.05
+
+        # Within grid_and_row_labels_row (width: 100% of available_width):
+        #   row_labels_layout (width: 5% of its parent's width)
+        #   grid_layout (width: 95% of its parent's width)
+
+        # Let's simplify: assume fixed pixel sizes for labels for a moment, or calculate cell_edge first.
+        # The most constrained dimension will determine cell_edge.
+        # Width available for num_cols cells and (num_cols-1) spacings, AND row_labels_width:
+        #   available_width = (num_cols * cell_edge + (num_cols-1)*spacing_x) + row_label_width
+        # Height available for num_rows cells and (num_rows-1) spacings, AND col_labels_height:
+        #   available_height = (num_rows * cell_edge + (num_rows-1)*spacing_y) + col_label_height
+
+        # Estimate typical label sizes (e.g., based on font size or a fixed value)
+        # For now, let's use their original size_hint proportions to estimate their impact.
+        estimated_row_labels_width = available_width * row_labels_width_proportion
+        estimated_col_labels_height = available_height * col_labels_height_proportion
+
+        width_for_grid_cells = available_width - estimated_row_labels_width
+        height_for_grid_cells = available_height - estimated_col_labels_height
+
+        cell_edge_w = (width_for_grid_cells - (num_cols - 1) * spacing_x) / num_cols
+        cell_edge_h = (height_for_grid_cells - (num_rows - 1) * spacing_y) / num_rows
+        cell_edge = min(cell_edge_w, cell_edge_h)
+
+        if cell_edge <= 1: cell_edge = 1 # Ensure positive
+
+        # --- Now, set sizes based on this cell_edge ---
+
+        # 1. Size the grid cells (children of self.grid_layout)
+        for child in self.grid_layout.children:
+            child.size_hint = (None, None)
+            child.size = (cell_edge, cell_edge)
+
+        # 2. Calculate actual grid_layout size and set it
+        actual_grid_width = num_cols * cell_edge + (num_cols - 1) * spacing_x
+        actual_grid_height = num_rows * cell_edge + (num_rows - 1) * spacing_y
+        self.grid_layout.size_hint = (None, None)
+        self.grid_layout.size = (actual_grid_width, actual_grid_height)
+
+        # 3. Size the label layouts
+        # Use a fixed reasonable size for labels for now, or make them adapt to font.
+        # Let's make them fit the grid.
+        # self.col_labels_layout was size_hint=(0.95, 1) relative to col_labels_and_spacer_row
+        # self.row_labels_layout was size_hint=(0.05, 1) relative to grid_and_row_labels_row
+
+        # Set size_hints to None to manually control size
+        self.col_labels_layout.size_hint = (None, None)
+        self.row_labels_layout.size_hint = (None, None)
+        self.corner_spacer.size_hint = (None, None)
+
+        # Define a practical minimum/default size for labels if grid is too small
+        min_label_width = 30
+        min_label_height = 20
+
+        # Column labels (numbers 1 to N for columns)
+        # Their height should be consistent. Width should match grid.
+        col_label_height = max(min_label_height, estimated_col_labels_height) # Or a fixed value like 30
+        self.col_labels_layout.size = (actual_grid_width, col_label_height)
+        for label in self.col_labels_layout.children: # These are labels for col numbers
+            label.size_hint_x = None
+            label.width = cell_edge # Make each col number label take cell_edge width
+            label.text_size = (label.width, None) # For text alignment
+
+        # Row labels (numbers 1 to N for rows)
+        # Their width should be consistent. Height should match grid.
+        row_label_width = max(min_label_width, estimated_row_labels_width) # Or a fixed value like 30
+        self.row_labels_layout.size = (row_label_width, actual_grid_height)
+        for label in self.row_labels_layout.children: # These are labels for row numbers
+            label.size_hint_y = None
+            label.height = cell_edge # Make each row number label take cell_edge height
+            label.text_size = (label.width, None) # For text alignment (use label.width for wrapping if text were long)
+
+
+        # 4. Size the corner spacer
+        self.corner_spacer.size = (row_label_width, col_label_height)
+
+        # 5. Adjust parent container sizes if necessary.
+        # self.col_labels_and_spacer_row contains corner_spacer and col_labels_layout
+        self.col_labels_and_spacer_row.size_hint = (None, None)
+        self.col_labels_and_spacer_row.size = (row_label_width + actual_grid_width, col_label_height)
+
+        # self.grid_and_row_labels_row contains row_labels_layout and grid_layout
+        self.grid_and_row_labels_row.size_hint = (None, None)
+        self.grid_and_row_labels_row.size = (row_label_width + actual_grid_width, actual_grid_height)
+
+        # self.grid_plus_labels_container contains col_labels_and_spacer_row and grid_and_row_labels_row
+        # This is the container whose size change should trigger this whole method.
+        # We can either let it keep its size_hint and center its children, or make it wrap them.
+        # For now, let it keep its size_hint and the content will be top-left aligned by default.
+        # To center, we'd need to add a wrapper BoxLayout or adjust padding/positioning.
+        # This might be an overreach for the current problem, but good to note.
+
+        # Center the content within self.grid_plus_labels_container
+        # self.grid_plus_labels_container is a BoxLayout with orientation='vertical'.
+        # Its children are self.col_labels_and_spacer_row and self.grid_and_row_labels_row.
+
+        # Width of the content. Both children rows should have the same width.
+        # This was calculated as: self.col_labels_and_spacer_row.size = (row_label_width + actual_grid_width, col_label_height)
+        content_width = self.col_labels_and_spacer_row.width
+
+        # Height of the content
+        content_height = self.col_labels_and_spacer_row.height + self.grid_and_row_labels_row.height
+
+        container_width = self.grid_plus_labels_container.width
+        container_height = self.grid_plus_labels_container.height
+
+        padding_x = (container_width - content_width) / 2
+        padding_y = (container_height - content_height) / 2
+
+        # Ensure padding is not negative (can happen if content somehow exceeds container, though unlikely with current logic)
+        padding_x = max(0, padding_x)
+        padding_y = max(0, padding_y)
+
+        self.grid_plus_labels_container.padding = [padding_x, padding_y, padding_x, padding_y]
+
+        print(f"update_game_board_layout: available=({available_width},{available_height}), grid=({actual_grid_width},{actual_grid_height}), cell_edge={cell_edge}")
+        print(f"Row Labels: {self.row_labels_layout.size}, Col Labels: {self.col_labels_layout.size}, Corner: {self.corner_spacer.size}")
+        # print(f"grid_plus_labels_container padding: {[padding_x, padding_y, padding_x, padding_y]}")
+
     def __init__(self, **kwargs):
         super(GameScreen, self).__init__(**kwargs)
         self.main_layout = BoxLayout(orientation='horizontal')
@@ -236,27 +404,27 @@ class GameScreen(Screen):
         self.game_layout.add_widget(self.info_label)
 
         # Container for grid + labels
-        grid_plus_labels_container = BoxLayout(orientation='vertical', size_hint=(1, 0.85))
+        self.grid_plus_labels_container = BoxLayout(orientation='vertical', size_hint=(1, 0.85))
 
         # Row for column labels and top-left spacer
-        col_labels_and_spacer_row = BoxLayout(orientation='horizontal', size_hint=(1, 0.05))
+        self.col_labels_and_spacer_row = BoxLayout(orientation='horizontal', size_hint=(1, 0.05))
 
         # Top-left corner spacer
-        corner_spacer = Widget(size_hint=(0.05, 1))
-        col_labels_and_spacer_row.add_widget(corner_spacer)
+        self.corner_spacer = Widget(size_hint=(0.05, 1))
+        self.col_labels_and_spacer_row.add_widget(self.corner_spacer) # Correction already applied in previous step, this is fine.
 
         # Column labels layout
         self.col_labels_layout = BoxLayout(orientation='horizontal', size_hint=(0.95, 1))
-        col_labels_and_spacer_row.add_widget(self.col_labels_layout)
+        self.col_labels_and_spacer_row.add_widget(self.col_labels_layout) # Correction already applied in previous step, this is fine.
 
-        grid_plus_labels_container.add_widget(col_labels_and_spacer_row)
+        self.grid_plus_labels_container.add_widget(self.col_labels_and_spacer_row) # Correction already applied in previous step, this is fine.
 
         # Row for the main grid and row labels
-        grid_and_row_labels_row = BoxLayout(orientation='horizontal', size_hint=(1, 0.95))
+        self.grid_and_row_labels_row = BoxLayout(orientation='horizontal', size_hint=(1, 0.95))
 
         # Row labels layout
         self.row_labels_layout = BoxLayout(orientation='vertical', size_hint=(0.05, 1))
-        grid_and_row_labels_row.add_widget(self.row_labels_layout)
+        self.grid_and_row_labels_row.add_widget(self.row_labels_layout) # This line was already correct.
 
         # Grid layout for the game board
         self.grid_size = grid_size # Ensure grid_size is assigned before using it for labels
@@ -355,10 +523,10 @@ class GameScreen(Screen):
         # Removed animation for 'O' marker buttons as per subtask instructions
         # The new 'O' markers are Widgets with Ellipses, not Buttons with text/color animations.
 
-        grid_and_row_labels_row.add_widget(self.grid_layout) # Add grid_layout to its new parent
-        grid_plus_labels_container.add_widget(grid_and_row_labels_row) # Add the row containing grid and row labels
+        self.grid_and_row_labels_row.add_widget(self.grid_layout) # Add grid_layout to its new parent
+        self.grid_plus_labels_container.add_widget(self.grid_and_row_labels_row) # Add the row containing grid and row labels
 
-        self.game_layout.add_widget(grid_plus_labels_container) # Add the main container to game_layout
+        self.game_layout.add_widget(self.grid_plus_labels_container) # Add the main container to game_layout
 
         # Button layout for additional actions
         button_layout = BoxLayout(
@@ -379,6 +547,8 @@ class GameScreen(Screen):
         button_layout.add_widget(self.toggle_sidebar_button)
         self.game_layout.add_widget(button_layout)
 
+        self.grid_plus_labels_container.bind(size=self.update_game_board_layout)
+
         self.main_layout.add_widget(self.game_layout)
         self.update_player_info()
 
@@ -388,6 +558,9 @@ class GameScreen(Screen):
         Clock.schedule_once(self._finalize_initial_layout, 0.5) # 0.5s delay
 
     def _finalize_initial_layout(self, dt):
+        # Add this line at the beginning of the method:
+        if hasattr(self, 'grid_plus_labels_container'): # Check if it exists
+            self.update_game_board_layout(self.grid_plus_labels_container, self.grid_plus_labels_container.size)
         print("Executing _finalize_initial_layout: opening sidebar first.")
 
         # Ensure sidebar_visible is False before opening, so animate_sidebar_open runs correctly.

@@ -710,8 +710,8 @@ class GameState:
 
         for r_neighbor, c_neighbor in potential_neighbors:
             # Check grid boundaries for the neighbor
-            # Assuming self.grid_size = (cols, rows) as per subtask note for this method
-            if 0 <= r_neighbor < self.grid_size[1] and 0 <= c_neighbor < self.grid_size[0]:
+            # self.grid_size stores (number_of_rows, number_of_columns)
+            if 0 <= r_neighbor < self.grid_size[0] and 0 <= c_neighbor < self.grid_size[1]:
                 neighbor_coords = (r_neighbor, c_neighbor)
                 if neighbor_coords in self.company_map:
                     return True # Adjacent to an existing company
