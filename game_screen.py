@@ -313,10 +313,11 @@ class GameScreen(Screen):
         self.blinking_animations = []
 
         # CRT Shader related initializations
-        # self.shader is no longer directly instantiated here.
-        self.shader = None # Keep for uniform access, will be set by FBO later if needed for direct uniform manipulation.
+        self.shader = None
+        self._temp_fs_code = None # Temporary storage for shader code
+        self._temp_vs_code = None # Temporary storage for shader code
         self.crt_shader_path = os.path.join('assets', 'crt_shader.glsl')
-        self.effect_widget = None # Will be created before shader string assignment
+        self.effect_widget = None
         self.crt_effect_on = 1.0
         self.crt_scanline_intensity = 0.5
         self.crt_curvature_amount = 0.05
@@ -325,9 +326,9 @@ class GameScreen(Screen):
         self.crt_noise_amount = 0.05
 
         self.effect_widget = EffectWidget()
-        self.add_widget(self.effect_widget) # Add effect widget to screen
+        self.add_widget(self.effect_widget)
 
-        shader_file_path = self.crt_shader_path # Use the instance variable
+        shader_file_path = self.crt_shader_path
         print(f"Attempting to load CRT shader strings from: {os.path.abspath(shader_file_path)}")
 
         if not os.path.exists(shader_file_path):
@@ -338,45 +339,46 @@ class GameScreen(Screen):
                     combined_shader_source = f.read()
 
                 vs_code, fs_code = _split_shader_source(combined_shader_source)
+                self._temp_fs_code = fs_code # Store on self
+                self._temp_vs_code = vs_code # Store on self
 
-                if vs_code and fs_code:
-                    # Store vs_code and fs_code if needed for later, though Fbo assigns them internally.
-                    # self.vs_code = vs_code
-                    # self.fs_code = fs_code
-
-                    def setup_fbo_shader(dt=None):
-                        if self.effect_widget.fbo:
-                            self.effect_widget.fbo.shader_fs = fs_code
-                            self.effect_widget.fbo.shader_vs = vs_code
-                            # After assigning strings, Kivy's Fbo internally creates a Shader object.
-                            # We can try to get a reference to it for uniform manipulation if Kivy exposes it.
-                            # Typically, uniforms for FBO shaders are set via fbo['uniform_name'] = value
-                            # Or, if EffectWidget rebuilds its own internal shader from these strings,
-                            # we might still use self.shader (if EffectWidget populates it) or a new way.
-                            # For now, let's assume uniform setting logic in setup_crt_shader will need adjustment
-                            # if self.shader is no longer the primary Shader object.
-                            # The prompt seems to imply self.shader.uniforms will still be used.
-                            # This means self.shader needs to be the Fbo's internal shader.
-                            # Kivy's Fbo has a 'shader' property after shader_fs/vs are set.
-                            self.shader = self.effect_widget.fbo.shader # Get reference to FBO's shader
-
-                            print("--- SUCCESS: CRT Shader strings assigned to EffectWidget's FBO. ---")
-                            if self.shader:
-                                print("--- FBO's internal shader object obtained. ---")
-                                self.setup_crt_shader() # Uniforms setup
-                            else:
-                                print("--- ERROR: Could not obtain FBO's internal shader object after setting strings. ---")
-                        else:
-                            print("--- ERROR: EffectWidget FBO not available for shader assignment. Retrying... ---")
-                            Clock.schedule_once(setup_fbo_shader, 0.1) # Retry shortly
-
-                    Clock.schedule_once(setup_fbo_shader)
+                if self._temp_vs_code and self._temp_fs_code:
+                    Clock.schedule_once(self.setup_fbo_shader) # Schedule the FBO setup
                 else:
                     print("--- ERROR: Failed to parse vertex or fragment shader from source file. ---")
             except Exception as e:
                 print(f"--- EXCEPTION during shader file reading or parsing: {e} ---")
 
         Window.bind(on_resize=self.on_window_resize)
+
+    # This method is now part of the GameScreen class
+    def setup_fbo_shader(self, dt=None):
+        if not hasattr(self, '_temp_fs_code') or not hasattr(self, '_temp_vs_code') or \
+           not self._temp_fs_code or not self._temp_vs_code:
+            print("--- ERROR: Shader code (fs/vs) not found on self for setup_fbo_shader. Aborting shader setup. ---")
+            return
+
+        if self.effect_widget.fbo:
+            try:
+                print(f"--- Assigning shader strings to FBO. Current FBO: {self.effect_widget.fbo} ---")
+                self.effect_widget.fbo.fs = self._temp_fs_code
+                self.effect_widget.fbo.vs = self._temp_vs_code
+
+                self.shader = self.effect_widget.fbo # The FBO itself is the shader context
+
+                if hasattr(self.shader, 'uniforms'):
+                    print(f"--- SUCCESS: Shader strings assigned to FBO. FBO (shader context) is now: {self.shader}. Uniforms are accessible. ---")
+                    self.setup_crt_shader()
+                else:
+                    print(f"--- WARNING: FBO shader configured, but 'uniforms' attribute not immediately found on FBO {self.shader}. Proceeding with setup_crt_shader. ---")
+                    self.setup_crt_shader()
+
+            except Exception as e:
+                print(f"--- EXCEPTION during FBO shader fs/vs assignment: {e} ---")
+                self.shader = None
+        else:
+            print("--- ERROR: EffectWidget FBO not available for shader assignment. Retrying... ---")
+            Clock.schedule_once(self.setup_fbo_shader, 0.1)
 
 
     def initialize_game(self, player_configurations, grid_size, game_turn_length, marker_percentage=0.1): # player_names -> player_configurations
@@ -679,8 +681,8 @@ class GameScreen(Screen):
         self.next_turn()
 
         Clock.schedule_once(self._finalize_initial_layout, 0.5) # 0.5s delay
-        # Clock.schedule_once(self.setup_crt_shader, 0.1) # REMOVED: Now called from setup_fbo_shader
-        # Window.bind(on_resize=self.on_window_resize) # This was already bound in __init__
+        # Note: Clock.schedule_once(self.setup_crt_shader, 0.1) was removed as setup_crt_shader is now called by setup_fbo_shader.
+        # Window.bind(on_resize=self.on_window_resize) is correctly in __init__
 
 
     def setup_crt_shader(self, dt=None):
