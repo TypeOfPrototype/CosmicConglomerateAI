@@ -267,8 +267,8 @@ class GameScreen(Screen):
         self.blinking_animations = []
 
         # CRT Shader related initializations
-        self.crt_shader_path = os.path.join('assets', 'crt_shader.glsl') # Corrected path
-        self.shader = None # Ensure self.shader is used consistently with the provided snippet
+        self.shader = None # Explicitly initialize self.shader to None
+        self.crt_shader_path = os.path.join('assets', 'crt_shader.glsl') # Ensure this is the variable name used below
         self.effect_widget = None
         self.crt_effect_on = 1.0
         self.crt_scanline_intensity = 0.5
@@ -277,35 +277,58 @@ class GameScreen(Screen):
         self.crt_chromatic_aberration_amount = 0.5
         self.crt_noise_amount = 0.05
 
-        try:
-            if not os.path.exists(self.crt_shader_path): # Corrected variable name
-                print(f"CRT Shader file not found at: {os.path.abspath(self.crt_shader_path)}") # Corrected variable name
-                self.shader = None
-            else:
-                with open(self.crt_shader_path, 'r') as f: # Corrected variable name
-                    shader_source = f.read()
-                self.shader = Shader(glsl=shader_source) # Kivy handles vs/fs from combined source, use glsl=
-                if not self.shader.is_compiled: # Corrected to check self.shader.is_compiled
-                    print("Failed to compile CRT shader:")
-                    # Kivy Shader object does not have separate get_shader_log(0) or (1).
-                    # It has a single log if compilation fails.
-                    print("Shader Log:", self.shader.get_shader_log())
-                    self.shader = None
+        print(f"Attempting to load CRT shader from: {os.path.abspath(self.crt_shader_path)}") # Debug print for path
+
+        if not os.path.exists(self.crt_shader_path):
+            print(f"--- ERROR: CRT Shader file NOT FOUND at: {os.path.abspath(self.crt_shader_path)} ---")
+        else:
+            try:
+                # Create a temporary Shader instance to check for success
+                # Kivy's Shader(source=filepath) handles opening and reading the file.
+                # However, the previous change used Shader(glsl=...) which is for direct string content.
+                # For consistency with loading from a file path, and as per Kivy docs for combined shaders in one file:
+                # We should read the file content first, then pass to glsl.
+                # The prompt example uses Shader(source=shader_file_path) - this is for separate .vs and .fs files if path has no extension,
+                # or for specific .glsl files. Let's stick to reading then glsl if it's a single combined file.
+                # Given crt_shader.glsl is a single file, reading its content and using glsl is appropriate.
+                # The prompt used temp_shader = Shader(source=shader_file_path) which might imply Kivy handles it.
+                # Kivy Shader(source=...) can load .glsl files directly. Let's follow the prompt's directness here.
+
+                temp_shader = Shader(source=self.crt_shader_path) # Use the path directly as per prompt.
+
+                if temp_shader.success: # 'success' is the attribute Kivy uses.
+                    self.shader = temp_shader # Assign to self.shader only if successful
+                    print("--- SUCCESS: CRT Shader compiled successfully. ---")
                 else:
-                    print("CRT Shader compiled successfully.")
-        except Exception as e:
-            print(f"Error loading CRT Shader: {e}")
-            self.shader = None
+                    print("--- ERROR: Failed to compile CRT shader. ---")
+                    # Kivy's Shader object stores vs_log and fs_log if separate shaders were loaded.
+                    # For a single .glsl file loaded via source, the main log is usually in fs_log or just through get_shader_log().
+                    # The prompt's get_shader_log(0) and get_shader_log(1) was from an older understanding.
+                    # A single combined .glsl file processed by Kivy might put all logs into fs_log or a general log.
+                    # Let's check for specific attributes vs_log and fs_log as per the prompt.
+                    if hasattr(temp_shader, 'vs_log') and temp_shader.vs_log:
+                         print("Vertex Shader Log:\n", temp_shader.vs_log)
+                    else:
+                         print("Vertex Shader Log: Not available or empty.")
+                    if hasattr(temp_shader, 'fs_log') and temp_shader.fs_log:
+                         print("Fragment Shader Log:\n", temp_shader.fs_log)
+                    else:
+                         print("Fragment Shader Log: Not available or empty.")
+                    # self.shader remains None if compilation fails
 
+            except Exception as e:
+                print(f"--- EXCEPTION during shader loading/compilation: {e} ---")
+                # self.shader remains None in case of other exceptions
 
+        # This part remains the same:
         self.effect_widget = EffectWidget()
-        if self.shader: # Check self.shader
-            self.effect_widget.effects = [self.shader] # Use self.shader
+        if self.shader: # This check is now more meaningful
+            self.effect_widget.effects = [self.shader]
+            print("CRT Shader assigned to EffectWidget.")
+        else:
+            print("CRT Shader not available, EffectWidget will have no custom effects.")
 
-        # Add effect_widget to GameScreen
-        self.add_widget(self.effect_widget) # THIS IS KEY
-
-        # Bind window resize for shader resolution uniform
+        self.add_widget(self.effect_widget)
         Window.bind(on_resize=self.on_window_resize)
 
 
