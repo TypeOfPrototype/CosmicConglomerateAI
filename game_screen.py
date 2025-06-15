@@ -124,9 +124,11 @@ class GameScreen(Screen):
         #   grid_and_row_labels_row (height: 95% of available_height)
 
         # Space for (grid + row_labels):
-        space_for_grid_and_row_labels_h = available_height * self.grid_and_row_labels_row.size_hint_y
+        # Use the original size_hint_y proportion (0.95 for grid_and_row_labels_row)
+        space_for_grid_and_row_labels_h = available_height * 0.95
         # Space for (col_labels + corner_spacer):
-        space_for_col_labels_and_spacer_h = available_height * self.col_labels_and_spacer_row.size_hint_y
+        # Use the original size_hint_y proportion (0.05 for col_labels_and_spacer_row)
+        space_for_col_labels_and_spacer_h = available_height * 0.05
 
         # Within grid_and_row_labels_row (width: 100% of available_width):
         #   row_labels_layout (width: 5% of its parent's width)
