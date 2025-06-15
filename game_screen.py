@@ -82,8 +82,8 @@ class CrtEffect(InstructionGroup):
         super().__init__(**kwargs)
         self.shader = None # This will hold the compiled Kivy Shader object
         self.success = False
-        self.vs_log = "" # Renamed from vs_log_str for consistency
-        self.fs_log = "" # Renamed from fs_log_str for consistency
+        self.vs_log = ""
+        self.fs_log = ""
 
         if vs_code and fs_code:
             try:
@@ -223,18 +223,20 @@ class GameScreen(Screen):
         super(GameScreen, self).__init__(**kwargs)
         self.main_layout = BoxLayout(orientation='horizontal')
 
+        # Initialize sidebar visibility and original width
         self.sidebar_visible = False
         self.sidebar_original_width_hint = 0.3
+
+        # Initialize properties for blinking
         self.blink_event = None
         self.blinking_buttons = []
         self.blinking_animations = []
 
-        # CRT Shader V3: Using CrtEffect class
-        self.shader = None
-        self.crt_effect_instance = None
+        # CRT Shader related initializations
+        self.shader = None # Initialize self.shader, used for uniform access
+        self.crt_effect_instance = None # Optional: store the effect instance
         self.crt_shader_path = os.path.join('assets', 'crt_shader.glsl')
-        self.effect_widget = EffectWidget() # Create EffectWidget instance first
-         # Initialize effect parameters
+        self.effect_widget = None
         self.crt_effect_on = 1.0
         self.crt_scanline_intensity = 0.5
         self.crt_curvature_amount = 0.05
@@ -242,27 +244,30 @@ class GameScreen(Screen):
         self.crt_chromatic_aberration_amount = 0.5
         self.crt_noise_amount = 0.05
 
+        self.effect_widget = EffectWidget()
+        # self.add_widget(self.effect_widget) is called after shader setup attempt
+
         shader_file_path = self.crt_shader_path
         print(f"Attempting to load CRT shader from: {os.path.abspath(shader_file_path)}")
 
         if not os.path.exists(shader_file_path):
             print(f"--- ERROR: CRT Shader file NOT FOUND at: {os.path.abspath(shader_file_path)} ---")
-            # self.shader remains None
+            self.shader = None
         else:
             try:
                 with open(shader_file_path, 'r') as f:
                     combined_shader_source = f.read()
 
-                vs_code, fs_code = _split_shader_source(combined_shader_source)
+                vs_code, fs_code = _split_shader_source(combined_shader_source) # Use existing helper
 
                 if vs_code and fs_code:
                     self.crt_effect_instance = CrtEffect(vs_code=vs_code, fs_code=fs_code)
 
                     if self.crt_effect_instance.success:
                         self.effect_widget.effects = [self.crt_effect_instance]
-                        self.shader = self.crt_effect_instance.shader
+                        self.shader = self.crt_effect_instance.shader # Get the actual Shader object for uniforms
                         print("--- SUCCESS: CrtEffect created, shader compiled, and assigned to EffectWidget. ---")
-                        self.setup_crt_shader() # Call to initialize uniforms
+                        self.setup_crt_shader()
                     else:
                         print(f"--- ERROR: CrtEffect shader compilation failed. ---")
                         if hasattr(self.crt_effect_instance, 'vs_log') and self.crt_effect_instance.vs_log:
@@ -277,7 +282,7 @@ class GameScreen(Screen):
                 print(f"--- EXCEPTION during CrtEffect creation or shader file processing: {e} ---")
                 self.shader = None
 
-        self.add_widget(self.effect_widget) # Add effect_widget to GameScreen AFTER setup attempt
+        self.add_widget(self.effect_widget)
         Window.bind(on_resize=self.on_window_resize)
 
     # setup_fbo_shader method is removed.
