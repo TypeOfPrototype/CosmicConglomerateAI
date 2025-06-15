@@ -20,6 +20,10 @@ from kivy.graphics import Color, Rectangle, Ellipse # Added Ellipse
 from kivy.clock import Clock
 from kivy.animation import Animation
 from kivy.app import App # Added import
+from kivy.graphics.shader import Shader
+from kivy.uix.effectwidget import EffectWidget
+import os # Already imported, ensure it's available where needed
+from functools import partial # Add this to imports in game_screen.py
 
 from custom_widgets import ImageButton
 from game_logic import GameState
@@ -262,8 +266,46 @@ class GameScreen(Screen):
         self.blinking_buttons = []
         self.blinking_animations = []
 
+        # CRT Shader related initializations
+        self.crt_shader_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'crt_shader.glsl')
+        self.crt_shader = None
+        self.effect_widget = None
+        self.crt_effect_on = 1.0
+        self.crt_scanline_intensity = 0.5
+        self.crt_curvature_amount = 0.05
+        self.crt_vignette_intensity = 0.3
+        self.crt_chromatic_aberration_amount = 0.5
+        self.crt_noise_amount = 0.05
+
+        try:
+            if os.path.exists(self.crt_shader_path):
+                with open(self.crt_shader_path, 'r') as f:
+                    shader_content = f.read()
+                self.crt_shader = Shader(glsl=shader_content)
+                if not self.crt_shader.is_compiled:
+                    print(f"CRT Shader failed to compile: {self.crt_shader.get_shader_log()}")
+                    self.crt_shader = None
+                else:
+                    print("CRT Shader compiled successfully.")
+            else:
+                print(f"CRT Shader file not found at: {self.crt_shader_path}")
+        except Exception as e:
+            print(f"Error loading CRT Shader: {e}")
+            self.crt_shader = None
+
+        self.effect_widget = EffectWidget()
+        if self.crt_shader:
+            self.effect_widget.effects = [self.crt_shader]
+
+        # Add the effect_widget to the screen, main_layout will be added to effect_widget
+        self.add_widget(self.effect_widget)
+
+
     def initialize_game(self, player_configurations, grid_size, game_turn_length, marker_percentage=0.1): # player_names -> player_configurations
+        # self.main_layout is now a child of self.effect_widget
         self.main_layout.clear_widgets()
+        self.effect_widget.add_widget(self.main_layout) # Add main_layout to effect_widget
+
         self.o_marker_buttons = []
 
         # Initialize ProfileManager and player profile objects
@@ -556,6 +598,35 @@ class GameScreen(Screen):
         self.next_turn()
 
         Clock.schedule_once(self._finalize_initial_layout, 0.5) # 0.5s delay
+        Clock.schedule_once(self.setup_crt_shader, 0.1) # Schedule shader setup
+        Window.bind(on_resize=self.on_window_resize)
+
+
+    def setup_crt_shader(self, dt=None):
+        if self.effect_widget and self.crt_shader:
+            self.effect_widget.shader_uniforms = {
+                'resolution': [Window.width, Window.height],
+                'time': 0.0,
+                'effect_on': self.crt_effect_on,
+                'scanline_intensity': self.crt_scanline_intensity,
+                'curvature_amount': self.crt_curvature_amount,
+                'vignette_intensity': self.crt_vignette_intensity,
+                'chromatic_aberration_amount': self.crt_chromatic_aberration_amount,
+                'noise_amount': self.crt_noise_amount
+            }
+            Clock.schedule_interval(self.update_shader_time, 1/60.0)
+            print("CRT Shader uniforms initialized and time update scheduled.")
+        else:
+            print("CRT Shader or EffectWidget not available for setup.")
+
+    def update_shader_time(self, dt):
+        if self.effect_widget and self.crt_shader and self.effect_widget.shader_uniforms:
+            self.effect_widget.shader_uniforms['time'] += dt
+
+    def on_window_resize(self, window, width, height):
+        if self.effect_widget and self.crt_shader and self.effect_widget.shader_uniforms:
+            self.effect_widget.shader_uniforms['resolution'] = [width, height]
+            print(f"Updated shader resolution to: [{width}, {height}]")
 
     def _finalize_initial_layout(self, dt):
         # Add this line at the beginning of the method:
@@ -1307,6 +1378,49 @@ class GameScreen(Screen):
         content_layout.add_widget(self.font_value_label)
         content_layout.add_widget(font_slider)
 
+        # --- CRT Shader Effect Controls ---
+        content_layout.add_widget(Label(text="[b]CRT Shader Effects[/b]", markup=True, size_hint_y=None, height=44))
+
+        # Master Toggle for CRT Effect
+        crt_effect_toggle_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=44)
+        crt_effect_toggle_layout.add_widget(Label(text="CRT Effect On/Off:", size_hint_x=0.7))
+        self.crt_effect_on_switch = Switch(active=(self.crt_effect_on == 1.0), size_hint_x=0.3)
+        self.crt_effect_on_switch.bind(active=self.on_crt_effect_toggle)
+        crt_effect_toggle_layout.add_widget(self.crt_effect_on_switch)
+        content_layout.add_widget(crt_effect_toggle_layout)
+
+        # Sliders for CRT parameters
+        crt_params = [
+            ("Scanline Intensity:", "crt_scanline_intensity", "crt_scanline_slider", "crt_scanline_value_label"),
+            ("Screen Curvature:", "crt_curvature_amount", "crt_curvature_slider", "crt_curvature_value_label"),
+            ("Vignette Intensity:", "crt_vignette_intensity", "crt_vignette_slider", "crt_vignette_value_label"),
+            ("Chromatic Aberration:", "crt_chromatic_aberration_amount", "crt_chromatic_slider", "crt_chromatic_value_label"),
+            ("Noise Amount:", "crt_noise_amount", "crt_noise_slider", "crt_noise_value_label"),
+        ]
+
+        for text, attr_name, slider_attr, value_label_attr in crt_params:
+            param_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=44)
+            param_layout.add_widget(Label(text=text, size_hint_x=0.4))
+
+            slider = Slider(
+                value=getattr(self, attr_name),
+                min=0, max=1, step=0.01,
+                size_hint_x=0.5
+            )
+            setattr(self, slider_attr, slider)
+
+            value_label = Label(text=f"{slider.value:.2f}", size_hint_x=0.1)
+            setattr(self, value_label_attr, value_label)
+
+            slider.bind(value=partial(self.on_crt_slider_value_change,
+                                      value_label_instance=value_label,
+                                      uniform_name=attr_name.replace("crt_", ""), # e.g. crt_scanline_intensity -> scanline_intensity
+                                      instance_var_name=attr_name))
+
+            param_layout.add_widget(slider)
+            param_layout.add_widget(value_label)
+            content_layout.add_widget(param_layout)
+
         # Spacer or separator can be added here if needed for visual separation
         # content_layout.add_widget(Label(size_hint_y=None, height=20)) # Example spacer
 
@@ -1341,9 +1455,22 @@ class GameScreen(Screen):
         self.settings_popup = Popup(
             title="Settings",
             content=content_layout,
-            size_hint=(0.6, 0.4) # 60% width, 40% height
+            size_hint=(0.8, 0.9) # Adjusted size_hint for more content
         )
         self.settings_popup.open()
+
+    def on_crt_effect_toggle(self, switch_instance, active_state):
+        self.crt_effect_on = 1.0 if active_state else 0.0
+        if self.effect_widget and self.effect_widget.shader_uniforms:
+            self.effect_widget.shader_uniforms['effect_on'] = self.crt_effect_on
+        print(f"CRT Effect toggled: {'On' if active_state else 'Off'}")
+
+    def on_crt_slider_value_change(self, slider_instance, value, value_label_instance, uniform_name, instance_var_name):
+        value_label_instance.text = f"{value:.2f}"
+        setattr(self, instance_var_name, value)
+        if self.effect_widget and self.effect_widget.shader_uniforms:
+            self.effect_widget.shader_uniforms[uniform_name] = value
+        # print(f"CRT Slider {uniform_name} changed to {value:.2f}") # Optional: for debugging
 
     def on_fullscreen_toggle(self, switch_instance, active_state):
         if active_state:
@@ -1467,6 +1594,7 @@ class GameScreen(Screen):
         anim = Animation(size_hint_x=self.sidebar_original_width_hint, opacity=1, duration=0.3)
         anim.bind(on_complete=self._trigger_grid_layout_update)
         anim.start(self.sidebar_layout)
+
 
     def animate_sidebar_close(self):
         """
