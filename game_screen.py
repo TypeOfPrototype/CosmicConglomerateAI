@@ -285,7 +285,18 @@ class GameScreen(Screen):
                 # Initialize uniform
                 if self.render_context:
                     self.render_context['pixel_size'] = 1000.0 # Effectively disable
-                    print("Pixelation RenderContext created and uniform initialized.")
+
+                    # Initialize texture_dimensions uniform
+                    # Use main_layout's current size if available, otherwise Window size as fallback.
+                    # These values should ideally be updated when main_layout's size is finalized.
+                    initial_width = self.main_layout.width if self.main_layout.width > 1 else Window.width
+                    initial_height = self.main_layout.height if self.main_layout.height > 1 else Window.height
+                    self.render_context['texture_dimensions'] = (float(initial_width), float(initial_height))
+
+                    print(f"Pixelation RenderContext created. pixel_size: 1000.0, texture_dimensions: ({initial_width}, {initial_height})")
+
+                    # Bind to main_layout size changes to update texture_dimensions
+                    self.main_layout.bind(size=self.on_main_layout_size_change)
                 else:
                     print("Failed to create RenderContext.")
                     self.pixelation_shader_object = None # Nullify if context failed
@@ -1566,13 +1577,21 @@ class GameScreen(Screen):
                 self.render_context['pixel_size'] = float(pixel_size)
                 print(f"Pixelation activated with pixel_size: {pixel_size}")
             else:
-                self.render_context['pixel_size'] = 1000.0 # Effectively disable
-                print("Pixelation deactivated.")
+                self.render_context['pixel_size'] = 0.0 # Use 0.0 to trigger shader bypass
+                print("Pixelation deactivated (set to 0.0).")
         # We also need to ensure the main_layout canvas is redrawn after changing the uniform
         # This might happen automatically, but if not, self.main_layout.canvas.ask_update() could be used.
         # For now, let's assume Kivy handles it when a uniform on a RenderContext changes.
         else:
             print("Pixelation RenderContext not available to set.")
+
+    def on_main_layout_size_change(self, instance, new_size):
+        if hasattr(self, 'render_context') and self.render_context:
+            # Ensure new_size components are positive floats
+            width = float(new_size[0]) if new_size[0] > 0 else 1.0 # Fallback to 1.0 to avoid zero
+            height = float(new_size[1]) if new_size[1] > 0 else 1.0 # Fallback to 1.0 to avoid zero
+            self.render_context['texture_dimensions'] = (width, height)
+            # print(f"Updated texture_dimensions to: {self.render_context['texture_dimensions']}") # For debugging
 
     def animate_sidebar_close(self):
         """
