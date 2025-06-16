@@ -17,7 +17,7 @@ from kivy.uix.widget import Widget # Added Widget
 from kivy.properties import StringProperty, NumericProperty, StringProperty # Added StringProperty for shader
 from kivy.core.window import Window
 from kivy.graphics.shader import Shader # Added for shader
-from kivy.graphics import Color, Rectangle, Ellipse # Added Ellipse
+from kivy.graphics import Color, Rectangle, Ellipse, RenderContext # Added RenderContext
 from kivy.clock import Clock
 from kivy.animation import Animation
 from kivy.app import App # Added import
@@ -266,21 +266,36 @@ class GameScreen(Screen):
         self.blinking_animations = []
 
         # Shader initialization
-        self.shader_source = 'assets/pixelate.glsl'
+        self.shader_source = 'assets/pixelate.glsl' # Path to shader
+        self.pixelation_shader_object = None # Will hold the Shader object
+        self.render_context = None # Will hold the RenderContext
+
         if os.path.exists(self.shader_source):
             try:
-                self.pixelation_shader = Shader(fs=self.shader_source) # Explicitly load as fragment shader
-                self.main_layout.canvas.shader = self.pixelation_shader
-                # Kivy will log errors if compilation/linking fails when the shader is first used.
-                # We attempt to set a uniform. If the shader failed, this might also error or be ignored.
-                self.pixelation_shader.uniforms['pixel_size'] = 1000.0 # Effectively disable
-                print("Pixelation shader assigned. Check logs for compilation status.")
+                with open(self.shader_source, 'r') as f:
+                    shader_content = f.read()
+
+                self.pixelation_shader_object = Shader(fs=shader_content)
+
+                # Apply shader using RenderContext to main_layout's canvas.before
+                # This ensures it's part of the instruction set before main_layout's own drawing.
+                with self.main_layout.canvas.before:
+                    self.render_context = RenderContext(fs=self.pixelation_shader_object.fs)
+
+                # Initialize uniform
+                if self.render_context:
+                    self.render_context['pixel_size'] = 1000.0 # Effectively disable
+                    print("Pixelation RenderContext created and uniform initialized.")
+                else:
+                    print("Failed to create RenderContext.")
+                    self.pixelation_shader_object = None # Nullify if context failed
+
             except Exception as e:
-                print(f"Error initializing or applying shader {self.shader_source}: {e}")
-                self.pixelation_shader = None
+                print(f"Error initializing shader or RenderContext: {e}")
+                self.pixelation_shader_object = None
+                self.render_context = None
         else:
             print(f"Error: Shader file {self.shader_source} not found.")
-            self.pixelation_shader = None
 
     def initialize_game(self, player_configurations, grid_size, game_turn_length, marker_percentage=0.1): # player_names -> player_configurations
         self.main_layout.clear_widgets()
@@ -1371,7 +1386,7 @@ class GameScreen(Screen):
         initial_pixelation_state = False # Default to off for AI or if no profile
         if current_profile and hasattr(current_profile, 'pixelation_effect_enabled'):
             initial_pixelation_state = current_profile.pixelation_effect_enabled
-        elif hasattr(self, 'pixelation_shader') and self.pixelation_shader and self.pixelation_shader.uniforms['pixel_size'] < 1000.0:
+        elif hasattr(self, 'render_context') and self.render_context and self.render_context['pixel_size'] < 1000.0:
             # Fallback to current shader state if profile not found but shader is active
             initial_pixelation_state = True
 
@@ -1546,15 +1561,18 @@ class GameScreen(Screen):
         print(f"Pixelation toggled via switch: {active_state}")
 
     def set_pixelation(self, active, pixel_size=4.0):
-        if hasattr(self, 'pixelation_shader') and self.pixelation_shader:
+        if hasattr(self, 'render_context') and self.render_context:
             if active:
-                self.pixelation_shader.uniforms['pixel_size'] = float(pixel_size)
+                self.render_context['pixel_size'] = float(pixel_size)
                 print(f"Pixelation activated with pixel_size: {pixel_size}")
             else:
-                self.pixelation_shader.uniforms['pixel_size'] = 1000.0 # Effectively disable
+                self.render_context['pixel_size'] = 1000.0 # Effectively disable
                 print("Pixelation deactivated.")
+        # We also need to ensure the main_layout canvas is redrawn after changing the uniform
+        # This might happen automatically, but if not, self.main_layout.canvas.ask_update() could be used.
+        # For now, let's assume Kivy handles it when a uniform on a RenderContext changes.
         else:
-            print("Pixelation shader not available to set.")
+            print("Pixelation RenderContext not available to set.")
 
     def animate_sidebar_close(self):
         """
