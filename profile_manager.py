@@ -9,6 +9,7 @@ class UserProfile:
         self.total_wins = 0
         self.total_losses = 0
         self.average_score = 0.0
+        self.pixelation_effect_enabled = False # Added pixelation setting
         # Add other relevant stats as needed, e.g., favorite_company, total_shares_traded
 
     def update_stats(self, score, is_win):
@@ -46,6 +47,7 @@ class UserProfile:
             'total_wins': self.total_wins,
             'total_losses': self.total_losses,
             'average_score': self.average_score,
+            'pixelation_effect_enabled': self.pixelation_effect_enabled, # Added pixelation setting
             # include other stats if added
         }
 
@@ -57,6 +59,7 @@ class UserProfile:
         profile.total_wins = data.get('total_wins', 0)
         profile.total_losses = data.get('total_losses', 0)
         profile.average_score = data.get('average_score', 0.0)
+        profile.pixelation_effect_enabled = data.get('pixelation_effect_enabled', False) # Added pixelation setting
         # hydrate other stats if added
         return profile
 
@@ -75,8 +78,9 @@ class ProfileManager:
         if username in self.profiles:
             raise ValueError(f"Profile for {username} already exists.")
         profile = UserProfile(username)
+        # pixelation_effect_enabled will be False by default from UserProfile.__init__
         self.profiles[username] = profile
-        self.save_profile(username)
+        self.save_profile(username) # This will save the default pixelation setting
         return profile
 
     def load_profile(self, username):
@@ -87,6 +91,7 @@ class ProfileManager:
             with open(filepath, 'r') as f:
                 data = json.load(f)
             profile = UserProfile.from_dict(data)
+        # Ensure pixelation_effect_enabled is loaded, from_dict handles the .get() with default
             self.profiles[username] = profile  # Store/update in the manager's cache
             return profile
         except Exception as e:
@@ -100,6 +105,7 @@ class ProfileManager:
         profile = self.profiles[username]
         filepath = os.path.join(self.profiles_dir, f"{username}.json")
         with open(filepath, 'w') as f:
+            # profile.to_dict() now includes pixelation_effect_enabled
             json.dump(profile.to_dict(), f, indent=4)
 
     def load_all_profiles(self):
@@ -113,6 +119,7 @@ class ProfileManager:
                 self.load_profile(username)
 
     def get_profile(self, username):
+        # This should return the profile loaded by load_profile, which now includes pixelation setting
         return self.profiles.get(username)
 
     def list_profile_names(self):

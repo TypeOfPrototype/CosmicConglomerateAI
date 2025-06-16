@@ -14,8 +14,9 @@ from kivy.uix.togglebutton import ToggleButton
 from kivy.uix.image import Image
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.widget import Widget # Added Widget
-from kivy.properties import StringProperty, NumericProperty
+from kivy.properties import StringProperty, NumericProperty, StringProperty # Added StringProperty for shader
 from kivy.core.window import Window
+from kivy.graphics.shader import Shader # Added for shader
 from kivy.graphics import Color, Rectangle, Ellipse # Added Ellipse
 from kivy.clock import Clock
 from kivy.animation import Animation
@@ -80,6 +81,8 @@ class OMarkerWidget(Widget):
 
 
 class GameScreen(Screen):
+    shader_source = StringProperty(None)
+
     def update_game_board_layout(self, instance, value):
         # instance is the widget whose size change triggered this, e.g., self.grid_plus_labels_container
         # value is its new size (width, height)
@@ -262,6 +265,23 @@ class GameScreen(Screen):
         self.blinking_buttons = []
         self.blinking_animations = []
 
+        # Shader initialization
+        self.shader_source = 'assets/pixelate.glsl'
+        if os.path.exists(self.shader_source):
+            try:
+                self.pixelation_shader = Shader(fs=self.shader_source) # Explicitly load as fragment shader
+                self.main_layout.canvas.shader = self.pixelation_shader
+                # Kivy will log errors if compilation/linking fails when the shader is first used.
+                # We attempt to set a uniform. If the shader failed, this might also error or be ignored.
+                self.pixelation_shader.uniforms['pixel_size'] = 1000.0 # Effectively disable
+                print("Pixelation shader assigned. Check logs for compilation status.")
+            except Exception as e:
+                print(f"Error initializing or applying shader {self.shader_source}: {e}")
+                self.pixelation_shader = None
+        else:
+            print(f"Error: Shader file {self.shader_source} not found.")
+            self.pixelation_shader = None
+
     def initialize_game(self, player_configurations, grid_size, game_turn_length, marker_percentage=0.1): # player_names -> player_configurations
         self.main_layout.clear_widgets()
         self.o_marker_buttons = []
@@ -270,6 +290,7 @@ class GameScreen(Screen):
         self.profile_manager = ProfileManager()
         # player_profile_objects will be keyed by player_game_name (display name)
         self.player_profile_objects = {}
+        initial_pixelation_active_state = False # Default for AI or if no profile
 
         for p_config in player_configurations:
             profile_username = p_config['profile_username'] # This can be None for AI
@@ -286,7 +307,7 @@ class GameScreen(Screen):
                         print(f"GameScreen Error creating new profile '{profile_username}': {e}. Trying to get existing.")
                         profile = self.profile_manager.get_profile(profile_username)
                         if not profile: # Fallback to temp UserProfile
-                            profile = UserProfile(profile_username)
+                            profile = UserProfile(profile_username) # This temp profile will have default pixelation off
                 else: # Existing human profile
                     profile = self.profile_manager.get_profile(profile_username)
                     if not profile:
@@ -296,14 +317,22 @@ class GameScreen(Screen):
                         except ValueError: # If it somehow exists after all (e.g. race condition)
                             profile = self.profile_manager.get_profile(profile_username)
                             if not profile: # Absolute fallback
-                                profile = UserProfile(profile_username)
+                                profile = UserProfile(profile_username) # Temp profile
 
                 # Store the UserProfile object (or a temporary one) against the player's game name
                 self.player_profile_objects[player_game_name] = profile if profile else UserProfile(profile_username) # Ensure a profile object is stored
 
+                # If this is the first player (typically the one whose settings might apply initially)
+                if not player_configurations or p_config == player_configurations[0]:
+                    if profile: # Check if profile is not None
+                         initial_pixelation_active_state = profile.pixelation_effect_enabled
             else: # AI Player (profile_username is None)
                 self.player_profile_objects[player_game_name] = None # Explicitly store None for AI players
                 print(f"GameScreen: Setting up AI player {player_game_name} with no profile object.")
+                # For AI, initial_pixelation_active_state remains False or its current value (if set by a previous human player)
+
+        # Apply pixelation based on the (first) player's profile or default
+        self.set_pixelation(active=initial_pixelation_active_state)
 
         # Initialize GameState
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1329,6 +1358,31 @@ class GameScreen(Screen):
         fullscreen_setting_layout.add_widget(self.fullscreen_switch)
         content_layout.add_widget(fullscreen_setting_layout)
 
+        # Pixelation Effect Toggle Setting
+        pixelation_setting_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=44)
+        pixelation_label = Label(text="Pixelation Effect:", size_hint_x=0.7)
+        self.pixelation_switch = Switch(size_hint_x=0.3)
+
+        # Initialize switch state - default to False (off) for now
+        # Later, this will be loaded from profile settings
+        current_player_game_name = self.game_state.players[self.game_state.current_player_index]
+        current_profile = self.player_profile_objects.get(current_player_game_name)
+
+        initial_pixelation_state = False # Default to off for AI or if no profile
+        if current_profile and hasattr(current_profile, 'pixelation_effect_enabled'):
+            initial_pixelation_state = current_profile.pixelation_effect_enabled
+        elif hasattr(self, 'pixelation_shader') and self.pixelation_shader and self.pixelation_shader.uniforms['pixel_size'] < 1000.0:
+            # Fallback to current shader state if profile not found but shader is active
+            initial_pixelation_state = True
+
+        self.pixelation_switch.active = initial_pixelation_state
+
+        self.pixelation_switch.bind(active=self.on_pixelation_toggle)
+
+        pixelation_setting_layout.add_widget(pixelation_label)
+        pixelation_setting_layout.add_widget(self.pixelation_switch)
+        content_layout.add_widget(pixelation_setting_layout)
+
         restart_button = Button(text="Restart Game", size_hint_y=None, height=44)
         restart_button.bind(on_press=self.restart_game_action)
         content_layout.add_widget(restart_button)
@@ -1467,6 +1521,40 @@ class GameScreen(Screen):
         anim = Animation(size_hint_x=self.sidebar_original_width_hint, opacity=1, duration=0.3)
         anim.bind(on_complete=self._trigger_grid_layout_update)
         anim.start(self.sidebar_layout)
+
+    def on_pixelation_toggle(self, switch_instance, active_state):
+        """
+        Called when the pixelation effect switch is toggled.
+        Activates or deactivates the pixelation shader.
+        """
+        self.set_pixelation(active=active_state)
+
+        # Save the setting to the current player's profile if it's a human player
+        current_player_game_name = self.game_state.players[self.game_state.current_player_index]
+        profile = self.player_profile_objects.get(current_player_game_name)
+
+        if profile and hasattr(profile, 'pixelation_effect_enabled'): # Ensure it's a UserProfile instance
+            profile.pixelation_effect_enabled = active_state
+            try:
+                self.profile_manager.save_profile(profile.username)
+                print(f"Saved pixelation setting ({active_state}) for profile: {profile.username}")
+            except Exception as e:
+                print(f"Error saving profile for {profile.username} after pixelation toggle: {e}")
+        else:
+            print(f"Pixelation setting not saved: No profile for {current_player_game_name} or profile object is not as expected.")
+
+        print(f"Pixelation toggled via switch: {active_state}")
+
+    def set_pixelation(self, active, pixel_size=4.0):
+        if hasattr(self, 'pixelation_shader') and self.pixelation_shader:
+            if active:
+                self.pixelation_shader.uniforms['pixel_size'] = float(pixel_size)
+                print(f"Pixelation activated with pixel_size: {pixel_size}")
+            else:
+                self.pixelation_shader.uniforms['pixel_size'] = 1000.0 # Effectively disable
+                print("Pixelation deactivated.")
+        else:
+            print("Pixelation shader not available to set.")
 
     def animate_sidebar_close(self):
         """
