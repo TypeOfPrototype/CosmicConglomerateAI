@@ -314,6 +314,16 @@ class GameScreen(Screen):
         # **Register the callback to handle GameState updates**
         self.game_state.register_callback(self.handle_game_state_update)
 
+        # Cache valid image paths to avoid repeated disk checks
+        self.valid_company_logos = {}
+        for company, path in self.game_state.company_logos.items():
+            if os.path.exists(path):
+                self.valid_company_logos[company] = path
+
+        self.valid_diamond_path = None
+        if os.path.exists(self.game_state.diamond_image_path):
+            self.valid_diamond_path = self.game_state.diamond_image_path
+
         # Sidebar for player information
         self.sidebar_layout = BoxLayout(
             orientation='vertical',
@@ -709,9 +719,9 @@ class GameScreen(Screen):
         current_player_name = self.game_state.players[self.game_state.current_player_index]
         success, message = self.game_state.place_diamond(current_coords, current_player_name)
         if success:
-            if os.path.exists(self.game_state.diamond_image_path):
+            if self.valid_diamond_path:
                 # Set the image source to diamond.png
-                instance.source = self.game_state.diamond_image_path
+                instance.source = self.valid_diamond_path
                 instance.reload()
                 instance.color = [1, 1, 1, 1]
                 # Start single flip animation
@@ -763,9 +773,8 @@ class GameScreen(Screen):
         Update the grid button to reflect the company.
         This includes setting the correct logo and color.
         """
-        logo_path = self.game_state.company_logos.get(company_name, '')
-
-        if os.path.exists(logo_path):
+        if company_name in self.valid_company_logos:
+            logo_path = self.valid_company_logos[company_name]
             button.source = ''  # Clear current image
             button.reload()     # Process clearing
 
@@ -852,8 +861,8 @@ class GameScreen(Screen):
             if selected_cell not in self.game_state.company_map: 
                 # This is the existing diamond visual update logic
                 if isinstance(button_to_animate, ImageButton): # Check if it's an ImageButton
-                    if os.path.exists(self.game_state.diamond_image_path):
-                        button_to_animate.source = self.game_state.diamond_image_path
+                    if self.valid_diamond_path:
+                        button_to_animate.source = self.valid_diamond_path
                         button_to_animate.reload()
                     else:
                         button_to_animate.text = "◆"
@@ -962,8 +971,8 @@ class GameScreen(Screen):
             company_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=60)
 
             # Add Company Logo
-            logo_path = self.game_state.company_logos.get(company, '')
-            if os.path.exists(logo_path):
+            if company in self.valid_company_logos:
+                logo_path = self.valid_company_logos[company]
                 logo = Image(source=logo_path, size_hint=(0.2, 1), allow_stretch=True, keep_ratio=True)
             else:
                 # Placeholder if logo not found
@@ -1253,8 +1262,8 @@ class GameScreen(Screen):
 
                 holding_row_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=int(Window.height * 0.04))
                 
-                logo_path = self.game_state.company_logos.get(company, '')
-                if os.path.exists(logo_path):
+                if company in self.valid_company_logos:
+                    logo_path = self.valid_company_logos[company]
                     logo_widget = Image(source=logo_path, size_hint_x=0.2, allow_stretch=True, keep_ratio=True)
                 else:
                     logo_widget = Label(text=" ", size_hint_x=0.2) # Placeholder
