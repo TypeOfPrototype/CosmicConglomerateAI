@@ -275,7 +275,7 @@ class GameState:
                 continue  # Skip the largest company
 
             # Update grid and company map
-            for coord_key, info in list(self.company_map.items()):
+            for coord_key, info in self.company_map.items():
                 if info["company_name"] == company:
                     self.company_map[coord_key]["company_name"] = largest_company
                     updated_entries.append((coord_key, largest_company))
