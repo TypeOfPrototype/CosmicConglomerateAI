@@ -682,7 +682,7 @@ class StartScreen(Screen):
 
         rename_popup.open()
 
-    def _execute_rename(self, old_username, new_name_input_widget, rename_popup_instance, instance_button_UNUSED=None): # Added default
+    def _execute_rename(self, instance, old_username, new_name_input_widget, rename_popup_instance):
         new_username = new_name_input_widget.text.strip()
         try:
             self.profile_manager.rename_profile(old_username, new_username)
@@ -715,7 +715,7 @@ class StartScreen(Screen):
 
         confirm_popup.open()
 
-    def _execute_delete(self, username_to_delete, confirm_popup_instance, instance_button_UNUSED=None): # Added default
+    def _execute_delete(self, instance, username_to_delete, confirm_popup_instance):
         try:
             self.profile_manager.delete_profile(username_to_delete)
             confirm_popup_instance.dismiss()
