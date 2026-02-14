@@ -594,14 +594,20 @@ class StartScreen(Screen):
 
 
     def show_profile_management_popup(self, instance):
+        # Reload profiles to ensure we display the latest data
+        self.profile_manager.load_all_profiles()
+
         content_layout = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(10))
 
         # Header for the list
         header_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(30), spacing=dp(5))
-        header_layout.add_widget(Label(text="Username", size_hint_x=0.3, font_name=FONT_PATH, font_size=dp(16)))
-        header_layout.add_widget(Label(text="High Score", size_hint_x=0.2, font_name=FONT_PATH, font_size=dp(16)))
-        header_layout.add_widget(Label(text="Games", size_hint_x=0.2, font_name=FONT_PATH, font_size=dp(16)))
-        header_layout.add_widget(Label(text="Actions", size_hint_x=0.3, font_name=FONT_PATH, font_size=dp(16)))
+        header_layout.add_widget(Label(text="Username", size_hint_x=0.2, font_name=FONT_PATH, font_size=dp(16)))
+        header_layout.add_widget(Label(text="HS", size_hint_x=0.15, font_name=FONT_PATH, font_size=dp(16)))
+        header_layout.add_widget(Label(text="G", size_hint_x=0.1, font_name=FONT_PATH, font_size=dp(16)))
+        header_layout.add_widget(Label(text="W", size_hint_x=0.1, font_name=FONT_PATH, font_size=dp(16)))
+        header_layout.add_widget(Label(text="L", size_hint_x=0.1, font_name=FONT_PATH, font_size=dp(16)))
+        header_layout.add_widget(Label(text="Avg", size_hint_x=0.15, font_name=FONT_PATH, font_size=dp(16)))
+        header_layout.add_widget(Label(text="Actions", size_hint_x=0.2, font_name=FONT_PATH, font_size=dp(16)))
         content_layout.add_widget(header_layout)
 
         scroll_view = ScrollView(size_hint=(1, 0.8))
@@ -634,14 +640,17 @@ class StartScreen(Screen):
             if profile_obj:
                 row_layout = BoxLayout(orientation='horizontal', spacing=dp(5), size_hint_y=None, height=dp(44))
 
-                row_layout.add_widget(Label(text=profile_obj.username, size_hint_x=0.3, font_name=FONT_PATH, font_size=dp(14)))
-                row_layout.add_widget(Label(text=str(profile_obj.high_score), size_hint_x=0.2, font_name=FONT_PATH, font_size=dp(14)))
-                row_layout.add_widget(Label(text=str(profile_obj.games_played), size_hint_x=0.2, font_name=FONT_PATH, font_size=dp(14)))
+                row_layout.add_widget(Label(text=profile_obj.username, size_hint_x=0.2, font_name=FONT_PATH, font_size=dp(14)))
+                row_layout.add_widget(Label(text=str(profile_obj.high_score), size_hint_x=0.15, font_name=FONT_PATH, font_size=dp(14)))
+                row_layout.add_widget(Label(text=str(profile_obj.games_played), size_hint_x=0.1, font_name=FONT_PATH, font_size=dp(14)))
+                row_layout.add_widget(Label(text=str(profile_obj.total_wins), size_hint_x=0.1, font_name=FONT_PATH, font_size=dp(14)))
+                row_layout.add_widget(Label(text=str(profile_obj.total_losses), size_hint_x=0.1, font_name=FONT_PATH, font_size=dp(14)))
+                row_layout.add_widget(Label(text=str(round(profile_obj.average_score)), size_hint_x=0.15, font_name=FONT_PATH, font_size=dp(14)))
 
-                actions_layout = BoxLayout(size_hint_x=0.3, spacing=dp(5))
-                rename_button = Button(text="Rename", font_size=dp(14), font_name=FONT_PATH)
+                actions_layout = BoxLayout(size_hint_x=0.2, spacing=dp(5))
+                rename_button = Button(text="Ren", font_size=dp(14), font_name=FONT_PATH)
                 rename_button.bind(on_press=partial(self._rename_profile_prompt, profile_obj.username))
-                delete_button = Button(text="Delete", font_size=dp(14), font_name=FONT_PATH)
+                delete_button = Button(text="Del", font_size=dp(14), font_name=FONT_PATH)
                 delete_button.bind(on_press=partial(self._delete_profile_confirm, profile_obj.username))
 
                 actions_layout.add_widget(rename_button)

@@ -257,6 +257,9 @@ class GameScreen(Screen):
         self.sidebar_visible = False
         self.sidebar_original_width_hint = 0.3
 
+        # Initialize game over flag
+        self.game_over_flag = False
+
         # Initialize properties for blinking
         self.blink_event = None
         self.blinking_buttons = []
@@ -265,6 +268,7 @@ class GameScreen(Screen):
     def initialize_game(self, player_configurations, grid_size, game_turn_length, marker_percentage=0.1): # player_names -> player_configurations
         self.main_layout.clear_widgets()
         self.o_marker_buttons = []
+        self.game_over_flag = False
 
         # Initialize ProfileManager and player profile objects
         self.profile_manager = ProfileManager()
@@ -1196,6 +1200,11 @@ class GameScreen(Screen):
         """
         Calculate final wealth and determine the winner.
         """
+        if self.game_over_flag:
+            return
+
+        self.game_over_flag = True
+
         player_wealth_summary = {
             player_name: self.game_state.player_wealth[player_name] for player_name in self.game_state.players
         }
