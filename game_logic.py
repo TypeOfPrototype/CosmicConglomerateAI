@@ -60,9 +60,11 @@ class GameState:
         # Callbacks for UI updates
         self.callbacks = []
         self.initial_o_marker_locations = set()
+        self.available_cells = {(r, c) for r in range(self.grid_size[0]) for c in range(self.grid_size[1])}
 
     def set_initial_o_marker_locations(self, locations_set):
         self.initial_o_marker_locations = locations_set
+        self.available_cells.difference_update(locations_set)
         print(f"Initial O marker locations set: {self.initial_o_marker_locations}") # Optional: for debugging
 
     def register_callback(self, callback):
@@ -133,6 +135,7 @@ class GameState:
                 "owner": current_player if current_player else "Diamond",
                 "value": initial_value
             }
+            self.available_cells.discard(coord)
             updated_entries.append((coord, company_name))
             print(f"Assigned '{company_name}' to {coord} owned by '{current_player if current_player else 'Diamond'}'.")
 
@@ -180,6 +183,7 @@ class GameState:
             "owner": current_player,
             "value": 0  # Will be updated below
         }
+        self.available_cells.discard(coords)
         print(f"Expanded company '{company_name}' into {coords} by '{current_player}'.")
 
         # Update company size and value
@@ -323,6 +327,7 @@ class GameState:
                 "owner": current_player,
                 "value": self.company_info[largest_company]['value']
             }
+            self.available_cells.discard(coords)
             updated_entries.append((coords, largest_company))
         else:
             self.company_map[coords]["value"] = self.company_info[largest_company]['value']
@@ -545,6 +550,7 @@ class GameState:
             return False, f"Position {coords} is already occupied."
 
         self.diamond_positions.add(coords)
+        self.available_cells.discard(coords)
         print(f"Placed diamond at {coords}.")
 
         # Find all connected diamonds including the newly placed one
@@ -625,15 +631,7 @@ class GameState:
         Allows an AI player to take a turn.
         """
         current_player = player_name
-        available_cells = []
-        # Iterate c from 0 to self.grid_size[1]-1 (cols) and r from 0 to self.grid_size[0]-1 (rows)
-        for r in range(self.grid_size[0]): # rows
-            for c in range(self.grid_size[1]): # cols
-                cell = (r, c)
-                if cell not in self.company_map and \
-                   cell not in self.diamond_positions and \
-                   cell not in self.initial_o_marker_locations:
-                    available_cells.append(cell)
+        available_cells = list(self.available_cells)
 
         if not available_cells:
             print(f"AI Warning: No available cells for {player_name} to make a move.") # Changed print message
